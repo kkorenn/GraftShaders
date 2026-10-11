@@ -46,7 +46,7 @@ public class ColorSpaceFragmentConverter implements ColorSpaceConverter {
 	private GlFramebuffer framebuffer;
 	private int swapTexture;
 
-	private GlTexture target;
+	private com.mojang.blaze3d.textures.GpuTexture target;
 
 	public ColorSpaceFragmentConverter(int width, int height, ColorSpace colorSpace) {
 		rebuildProgram(width, height, colorSpace);
@@ -58,7 +58,7 @@ public class ColorSpaceFragmentConverter implements ColorSpaceConverter {
 			program = null;
 			framebuffer.destroy();
 			framebuffer = null;
-			GlStateManager._deleteTexture(swapTexture);
+			net.irisshaders.iris.metal.MetalTextureIds.delete(swapTexture);
 			swapTexture = 0;
 		}
 
@@ -86,9 +86,9 @@ public class ColorSpaceFragmentConverter implements ColorSpaceConverter {
 		ProgramBuilder builder = ProgramBuilder.begin("colorSpaceFragment", vertexSource, null, source, ImmutableSet.of());
 
 		builder.uniformMatrix(UniformUpdateFrequency.ONCE, "projection", () -> new Matrix4f(2, 0, 0, 0, 0, 2, 0, 0, 0, 0, 0, 0, -1, -1, 0, 1));
-		builder.addDynamicSampler(() -> target.glId(), GlSampler.NEAREST,  "readImage");
+		builder.addDynamicSampler(() -> target.iris$getGlId(), GlSampler.NEAREST,  "readImage");
 
-		swapTexture = GlStateManager._genTexture();
+		swapTexture = net.irisshaders.iris.metal.MetalTextureIds.allocate();
 		IrisRenderSystem.texImage2D(swapTexture, GL30C.GL_TEXTURE_2D, 0, GL30C.GL_RGBA8, width, height, 0, GL30C.GL_RGBA, GL30C.GL_UNSIGNED_BYTE, null);
 
 		this.framebuffer = new GlFramebuffer();
@@ -96,7 +96,7 @@ public class ColorSpaceFragmentConverter implements ColorSpaceConverter {
 		this.program = builder.build();
 	}
 
-	public void process(GlTexture targetImage) {
+	public void process(com.mojang.blaze3d.textures.GpuTexture targetImage) {
 		if (colorSpace == ColorSpace.SRGB) return;
 
 		this.target = targetImage;
@@ -117,6 +117,6 @@ public class ColorSpaceFragmentConverter implements ColorSpaceConverter {
 		}
 		Program.unbind();
 		framebuffer.bindAsReadBuffer();
-		IrisRenderSystem.copyTexSubImage2D(targetImage.glId(), GL11C.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
+		IrisRenderSystem.copyTexSubImage2D(targetImage.iris$getGlId(), GL11C.GL_TEXTURE_2D, 0, 0, 0, 0, 0, width, height);
 	}
 }

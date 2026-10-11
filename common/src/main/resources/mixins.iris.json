@@ -1,6 +1,9 @@
 {
   "required": true,
   "minVersion": "0.8",
+  "mixinextras": {
+    "minVersion": "0.5.2"
+  },
   "package": "net.irisshaders.iris.mixin",
   "refmap": "iris.refmap.json",
   "plugin": "net.irisshaders.iris.mixin.IrisMixinPlugin",
@@ -130,7 +133,9 @@
     "texture.pbr.MixinDirectoryLister",
     "texture.pbr.MixinReloadableTexture",
     "texture.pbr.MixinSpriteContents",
-    "texture.pbr.MixinTextureAtlas"
+    "texture.pbr.MixinTextureAtlas",
+    "MixinMetalTexture",
+    "MixinMetalRenderPassBackend"
   ],
   "injectors": {
     "defaultRequire": 1,

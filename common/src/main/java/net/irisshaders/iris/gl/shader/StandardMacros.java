@@ -49,8 +49,9 @@ public class StandardMacros {
 		define(standardDefines, "MC_VERSION", getMcVersion());
 		define(standardDefines, "MC_MIPMAP_LEVEL", String.valueOf(Minecraft.getInstance().options.mipmapLevels().get()));
 		define(standardDefines, "IRIS_VERSION", getFormattedIrisVersion());
-		define(standardDefines, "MC_GL_VERSION", getGlVersion(GL20C.GL_VERSION));
-		define(standardDefines, "MC_GLSL_VERSION", getGlVersion(GL20C.GL_SHADING_LANGUAGE_VERSION));
+		// Metal feature level reported to packs: GLSL 4.30 (compute, SSBOs, image load/store map onto Metal).
+		define(standardDefines, "MC_GL_VERSION", "430");
+		define(standardDefines, "MC_GLSL_VERSION", "430");
 		define(standardDefines, getOsString());
 		define(standardDefines, getVendor());
 		define(standardDefines, getRenderer());
@@ -257,7 +258,9 @@ public class StandardMacros {
 	 */
 	public static String getOsString() {
 		return switch (Util.getPlatform()) {
-			case OSX -> "MC_OS_MAC";
+			// Graft Shaders: packs use MC_OS_MAC only to work around Apple's OpenGL 4.1 driver (no colored lighting, custom
+			// images, ...). Rendering here is native Metal with those features, so don't claim that driver.
+			case OSX -> "MC_OS_UNKNOWN";
 			case LINUX -> "MC_OS_LINUX";
 			case WINDOWS ->
 				"MC_OS_WINDOWS"; // Note: Optifine doesn't have a macro for Solaris. https://github.com/sp614x/optifine/blob/9c6a5b5326558ccc57c6490b66b3be3b2dc8cbef/OptiFineDoc/doc/shaders.txt#L709-L714
@@ -329,23 +332,20 @@ public class StandardMacros {
 	 * @see <a href="https://github.com/sp614x/optifine/blob/9c6a5b5326558ccc57c6490b66b3be3b2dc8cbef/OptiFineDoc/doc/shaders.txt#L735-L738">Optifine Doc</a>
 	 */
 	public static Set<String> getGlExtensions() {
-		// In OpenGL Core, we must use a new way of retrieving extensions.
-		int numExtensions = GlStateManager._getInteger(GL30C.GL_NUM_EXTENSIONS);
-
-		String[] extensions = new String[numExtensions];
-
-		for (int i = 0; i < numExtensions; i++) {
-			extensions[i] = IrisRenderSystem.getStringi(GL30C.GL_EXTENSIONS, i);
-		}
-
-		// TODO note that we do not add extensions based on if the shader uses them and if they are supported
-		// see https://github.com/sp614x/optifine/blob/master/OptiFineDoc/doc/shaders.txt#L738
-
-		// NB: Use Collectors.toSet(). In some cases, there are duplicate extensions in the extension list.
-		// RenderDoc is one example - it causes the GL_KHR_debug extension to appear twice:
-		//
-		// https://github.com/IrisShaders/Iris/issues/971
-		return Arrays.stream(extensions).map(s -> "MC_" + s).collect(Collectors.toSet());
+		// No GL on Metal. Packs see an extension macro only for features Graft Shaders implements on Metal.
+		return Set.of(
+			"MC_GL_ARB_compute_shader",
+			"MC_GL_ARB_tessellation_shader",
+			"MC_GL_ARB_shader_storage_buffer_object",
+			"MC_GL_ARB_shader_image_load_store",
+			"MC_GL_ARB_buffer_storage",
+			"MC_GL_ARB_draw_buffers_blend",
+			"MC_GL_ARB_texture_storage",
+			"MC_GL_ARB_explicit_attrib_location",
+			"MC_GL_ARB_shading_language_420pack",
+			"MC_GL_ARB_shader_texture_lod",
+			"MC_GL_EXT_gpu_shader4"
+		);
 	}
 
 

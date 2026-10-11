@@ -228,7 +228,7 @@ public class ShadowRenderer {
 		final Int2ObjectMap<PackShadowDirectives.SamplingSettings> colorSamplingSettings =
 			shadowDirectives.getColorSamplingSettings();
 
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE4);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE4);
 
 		configureDepthSampler(targets.getDepthTexture().iris$getGlId(), depthSamplingSettings.get(0));
 
@@ -242,7 +242,7 @@ public class ShadowRenderer {
 			}
 		}
 
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE0);
 	}
 
 	private void configureDepthSampler(int glTextureId, PackShadowDirectives.DepthSamplingSettings settings) {
@@ -277,13 +277,13 @@ public class ShadowRenderer {
 	}
 
 	private void generateMipmaps() {
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE4);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE4);
 
 		for (MipmapPass mipmapPass : mipmapPasses) {
 			setupMipmappingForTexture(mipmapPass.texture(), mipmapPass.targetFilteringMode());
 		}
 
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE0);
 	}
 
 	private void setupMipmappingForTexture(int texture, int filteringMode) {
@@ -374,7 +374,7 @@ public class ShadowRenderer {
 
 	public void setupShadowViewport() {
 		// Set up the viewport
-		GlStateManager._viewport(0, 0, resolution, resolution);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 	}
 
 	public void renderShadows(LevelRendererAccessor levelRenderer, Camera playerCamera, CameraRenderState renderState) {
@@ -493,7 +493,7 @@ public class ShadowRenderer {
 		// However, it only partially resolves issues of light leaking into caves.
 		//
 		// TODO: Better way of preventing light from leaking into places where it shouldn't
-		GlStateManager._disableCull();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 		ChunkSectionsToRender sections = new ChunkSectionsToRender(null, null, 0, null);
 		((SodiumChunkSection) (Object) sections).sodium$setRendering(((LevelRendererExtension) levelRenderer).sodium$getWorldRenderer(),
@@ -508,7 +508,7 @@ public class ShadowRenderer {
 		pipeline.setPhase(WorldRenderingPhase.ENTITIES);
 
 		// Reset our viewport in case Sodium overrode it
-		GlStateManager._viewport(0, 0, resolution, resolution);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState(); // Metal passes cover their attachments
 
 		profiler.popPush("entities");
 
@@ -599,11 +599,11 @@ public class ShadowRenderer {
 		profiler.popPush("restore gl state");
 
 		// Restore backface culling
-		GlStateManager._enableCull();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 		((LevelRendererExtension) levelRenderer).sodium$setMatrices(playerMatrices);
 
 		// Restore the old viewport
-		GlStateManager._viewport(0, 0, client.getMainRenderTarget().width, client.getMainRenderTarget().height);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 		if (levelRenderer instanceof CullingDataCache) {
 			((CullingDataCache) levelRenderer).restoreState();

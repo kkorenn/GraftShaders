@@ -14,44 +14,37 @@ public class ProgramCreator {
 	private static final Logger LOGGER = LogManager.getLogger(ProgramCreator.class);
 
 	public static int create(String name, GlShader... shaders) {
-		int program = GlStateManager.glCreateProgram();
-
-		GlStateManager._glBindAttribLocation(program, 11, "iris_Entity");
-		GlStateManager._glBindAttribLocation(program, 11, "mc_Entity");
-		GlStateManager._glBindAttribLocation(program, 12, "mc_midTexCoord");
-		GlStateManager._glBindAttribLocation(program, 13, "at_tangent");
-		GlStateManager._glBindAttribLocation(program, 14, "at_midBlock");
-
-		GlStateManager._glBindAttribLocation(program, 0, "Position");
-		GlStateManager._glBindAttribLocation(program, 1, "UV0");
-
+		String vertex = null;
+		String fragment = null;
+		String geometry = null;
+		String control = null;
+		String evaluation = null;
 		for (GlShader shader : shaders) {
-			GLDebug.nameObject(KHRDebug.GL_SHADER, shader.getHandle(), shader.getName());
-
-			GlStateManager.glAttachShader(program, shader.getHandle());
+			String[] src = GlShader.source(shader.getHandle());
+			switch (src[0]) {
+				case "VERTEX" -> vertex = src[2];
+				case "FRAGMENT" -> fragment = src[2];
+				case "GEOMETRY" -> geometry = src[2];
+				case "TESSELATION_CONTROL" -> control = src[2];
+				case "TESSELATION_EVAL" -> evaluation = src[2];
+				case "COMPUTE" -> {
+					return net.irisshaders.iris.metal.MetalProgram.create(name, net.irisshaders.iris.metal.MetalGlsl.linkCompute(name, src[2]));
+				}
+				default -> throw new ShaderCompileException(name, "Graft Shaders: " + src[0] + " shaders are not supported on Metal");
+			}
 		}
-
-		GlStateManager.glLinkProgram(program);
-
-		GLDebug.nameObject(KHRDebug.GL_PROGRAM, program, name);
-
-		//Always detach shaders according to https://www.khronos.org/opengl/wiki/Shader_Compilation#Cleanup
-		for (GlShader shader : shaders) {
-			IrisRenderSystem.detachShader(program, shader.getHandle());
-		}
-
-		String log = IrisRenderSystem.getProgramInfoLog(program);
-
-		if (!log.isEmpty()) {
-			LOGGER.warn("Program link log for " + name + ": " + log);
-		}
-
-		int result = GlStateManager.glGetProgrami(program, GL20C.GL_LINK_STATUS);
-
-		if (result != GL20C.GL_TRUE) {
-			throw new ShaderCompileException(name, log);
-		}
-
-		return program;
+		java.util.Map<String, Integer> attributes = new java.util.HashMap<>();
+		attributes.put("iris_Entity", 11);
+		attributes.put("mc_Entity", 11);
+		attributes.put("mc_midTexCoord", 12);
+		attributes.put("at_tangent", 13);
+		attributes.put("at_midBlock", 14);
+		attributes.put("Position", 0);
+		attributes.put("UV0", 1);
+		// Iris's own pathway shaders name the same inputs with an iris_ prefix.
+		attributes.put("iris_Position", 0);
+		attributes.put("iris_UV0", 1);
+		net.irisshaders.iris.metal.MetalGlsl.Linked linked = net.irisshaders.iris.metal.MetalGlsl.link(name, vertex, control, evaluation, geometry, fragment, attributes);
+		return net.irisshaders.iris.metal.MetalProgram.create(name, linked);
 	}
 }

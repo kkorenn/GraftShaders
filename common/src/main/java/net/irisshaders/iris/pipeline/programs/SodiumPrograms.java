@@ -66,7 +66,7 @@ public class SodiumPrograms {
 
 			AlphaTest alphaTest = getAlphaTest(pass, source);
 			Map<PatchShaderType, String> transformed = transformShaders(source, alphaTest, programSet);
-			GlProgram<ChunkShaderInterface> shader = createShader(pipeline, pass, source, alphaTest, customUniforms, flipState, createGlShaders(pass.name().toLowerCase(Locale.ROOT), transformed));
+			GlProgram<ChunkShaderInterface> shader = createShader(pipeline, pass, source, alphaTest, customUniforms, flipState, transformed);
 			shaders.put(pass, shader);
 		}
 
@@ -94,16 +94,6 @@ public class SodiumPrograms {
 		return transformed;
 	}
 
-	private Map<PatchShaderType, GlShader> createGlShaders(String passName, Map<PatchShaderType, String> transformed) {
-		Map<PatchShaderType, GlShader> newMap = new EnumMap<>(PatchShaderType.class);
-		for (Map.Entry<PatchShaderType, String> entry : transformed.entrySet()) {
-			if (entry.getValue() == null) continue;
-			newMap.put(entry.getKey(), new GlShader(ShaderType.fromGlShaderType(entry.getKey().glShaderType.id),
-				Identifier.fromNamespaceAndPath("iris", "sodium-shader-" + passName), new ShaderParser.ParsedShader(entry.getValue(), new String[0])));
-		}
-		return newMap;
-	}
-
 	private Supplier<ImmutableSet<Integer>> getFlipState(IrisRenderingPipeline pipeline, Pass pass, boolean isShadowPass) {
 		if (isShadowPass) {
 			return pipeline::getFlippedBeforeShadow;
@@ -114,20 +104,32 @@ public class SodiumPrograms {
 	private GlProgram<ChunkShaderInterface> createShader(IrisRenderingPipeline pipeline, Pass pass, ProgramSource source,
 														 AlphaTest alphaTest,
 														 CustomUniforms customUniforms, Supplier<ImmutableSet<Integer>> flipState,
-														 Map<PatchShaderType, GlShader> transformed) {
-		GlProgram.Builder builder = GlProgram.builder(Identifier.fromNamespaceAndPath("sodium", "chunk_shader_for_" + pass.name().toLowerCase(Locale.ROOT)));
+														 Map<PatchShaderType, String> transformed) {
+		// Metal: a Graft Shaders program; Sodium's GlProgram carries its id and Graft's SodiumMetal routes it to GraftShadersSodium.
+		Map<String, Integer> attributes = new java.util.HashMap<>();
+		attributes.put("a_Position", ChunkShaderBindingPoints.ATTRIBUTE_POSITION);
+		attributes.put("a_Color", ChunkShaderBindingPoints.ATTRIBUTE_COLOR);
+		attributes.put("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE);
+		attributes.put("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX);
+		attributes.put("mc_Entity", 11);
+		attributes.put("mc_midTexCoord", 12);
+		attributes.put("at_tangent", 13);
+		attributes.put("iris_Normal", 10);
+		attributes.put("at_midBlock", 14);
+		String name = "sodium_" + (pass == Pass.TERRAIN ? "terrain_solid" : pass.name().toLowerCase(Locale.ROOT));
+		int handle = net.irisshaders.iris.metal.MetalProgram.create(name, net.irisshaders.iris.metal.MetalGlsl.link(name,
+			transformed.get(PatchShaderType.VERTEX), transformed.get(PatchShaderType.TESS_CONTROL), transformed.get(PatchShaderType.TESS_EVAL),
+			transformed.get(PatchShaderType.GEOMETRY), transformed.get(PatchShaderType.FRAGMENT), attributes));
 
-		for (GlShader shader : transformed.values()) {
-			builder.attachShader(shader);
-		}
+		if (!hasNormal) hasNormal = IrisRenderSystem.getAttribLocation(handle, "iris_Normal") != -1;
+		if (!hasMidBlock) hasMidBlock = IrisRenderSystem.getAttribLocation(handle, "at_midBlock") != -1;
+		if (!hasBlockId) hasBlockId = IrisRenderSystem.getAttribLocation(handle, "mc_Entity") != -1;
+		if (!hasMidUv) hasMidUv = IrisRenderSystem.getAttribLocation(handle, "mc_midTexCoord") != -1;
 
 		boolean containsTessellation = source.getTessEvalSource().isPresent();
-
-		try {
-			return buildProgram(builder, pipeline, pass, source, alphaTest, customUniforms, flipState, containsTessellation);
-		} finally {
-			transformed.values().forEach(GlShader::delete);
-		}
+		return new GlProgram<>(handle, context -> new SodiumShader(pipeline, pass, context, handle, source.getDirectives().getBlendModeOverride().orElse(null),
+			createBufferBlendOverrides(source), customUniforms, flipState, alphaTest.reference(), containsTessellation)) {
+		};
 	}
 
 	private GlFramebuffer createFramebuffer(Pass pass, ProgramSource source,
@@ -151,35 +153,6 @@ public class SodiumPrograms {
 			}
 		});
 		return overrides;
-	}
-
-	private GlProgram<ChunkShaderInterface> buildProgram(GlProgram.Builder builder, IrisRenderingPipeline pipeline,
-														 Pass pass, ProgramSource source, AlphaTest alphaTest, CustomUniforms customUniforms,
-														 Supplier<ImmutableSet<Integer>> flipState,
-														 boolean containsTessellation) {
-		return builder
-			.bindAttribute("a_Position", ChunkShaderBindingPoints.ATTRIBUTE_POSITION)
-			.bindAttribute("a_Color", ChunkShaderBindingPoints.ATTRIBUTE_COLOR)
-			.bindAttribute("a_TexCoord", ChunkShaderBindingPoints.ATTRIBUTE_TEXTURE)
-			.bindAttribute("a_LightAndData", ChunkShaderBindingPoints.ATTRIBUTE_LIGHT_MATERIAL_INDEX)
-			.bindAttribute("mc_Entity", 11)
-			.bindAttribute("mc_midTexCoord", 12)
-			.bindAttribute("at_tangent", 13)
-			.bindAttribute("iris_Normal", 10)
-			.bindAttribute("at_midBlock", 14)
-			.link((shader) -> {
-				int handle = ((GlObject) shader).handle();
-				GLDebug.nameObject(GL43C.GL_PROGRAM, handle, "sodium-terrain-" + pass.toString().toLowerCase(Locale.ROOT));
-
-				if (!hasNormal) hasNormal = IrisRenderSystem.getAttribLocation(handle, "iris_Normal") != -1;
-				if (!hasMidBlock) hasMidBlock = IrisRenderSystem.getAttribLocation(handle, "at_midBlock") != -1;
-				if (!hasBlockId) hasBlockId = IrisRenderSystem.getAttribLocation(handle, "mc_Entity") != -1;
-				if (!hasMidUv) hasMidUv = IrisRenderSystem.getAttribLocation(handle, "mc_midTexCoord") != -1;
-
-				return new SodiumShader(pipeline, pass, shader, handle, source.getDirectives().getBlendModeOverride().orElse(null),
-					createBufferBlendOverrides(source), customUniforms, flipState,
-					alphaTest.reference(), containsTessellation);
-			});
 	}
 
 	public GlProgram<ChunkShaderInterface> getProgram(TerrainRenderPass pass) {

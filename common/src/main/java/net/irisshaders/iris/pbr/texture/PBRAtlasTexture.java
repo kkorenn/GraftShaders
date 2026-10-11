@@ -152,7 +152,8 @@ public class PBRAtlasTexture extends AbstractTexture implements PBRDumpable {
 		this.maxMipLevel = k;
 		this.mipLevelCount = k + 1;
 		this.mipViews = new GpuTextureView[this.mipLevelCount];
-		TextureManipulationUtil.fillWithColor(texture.iris$getGlId(), maxMipLevel, type.getDefaultValue());
+		int rgba = type.getDefaultValue(); // clearColorTexture clears every mip level; 1.21 takes ARGB
+		gpuDevice.createCommandEncoder().clearColorTexture(texture, (rgba & 0xFF) << 24 | rgba >>> 8);
 
 		for (int l = 0; l <= this.maxMipLevel; l++) {
 			this.mipViews[l] = gpuDevice.createTextureView(this.texture, l, 1);

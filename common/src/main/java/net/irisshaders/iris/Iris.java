@@ -131,12 +131,8 @@ public class Iris {
 			return;
 		}
 
-		if (GL.getCapabilities().GL_KHR_parallel_shader_compile) {
-			KHRParallelShaderCompile.glMaxShaderCompilerThreadsKHR(10);
-		} else if (GL.getCapabilities().GL_ARB_parallel_shader_compile) {
-			ARBParallelShaderCompile.glMaxShaderCompilerThreadsARB(10);
-		}
-
+		net.irisshaders.iris.metal.GraftShadersDraw.install();
+		net.irisshaders.iris.metal.GraftShadersSodium.install();
 		PBRTextureManager.INSTANCE.init();
 
 		VertexSerializerRegistry.instance().registerSerializer(DefaultVertexFormat.NEW_ENTITY, IrisVertexFormats.TERRAIN, new EntityToTerrainVertexSerializer());
@@ -420,14 +416,8 @@ public class Iris {
 			Iris.logger.fatal("Failed to save config!", e);
 		}
 
-		int success;
-		if (enable) {
-			success = GLDebug.setupDebugMessageCallback();
-		} else {
-			GLDebug.reloadDebugState();
-			GlDebug.enableDebugCallback(Minecraft.getInstance().options.glDebugVerbosity, false, new HashSet<>(((GlDevice) RenderSystem.getDevice()).getEnabledExtensions()));
-			success = 1;
-		}
+		// No OpenGL debug output on Metal; use Xcode's Metal debugger / MTL_DEBUG_LAYER instead.
+		int success = 1;
 
 		logger.info("Debug functionality is " + (enable ? "enabled, logging will be more verbose!" : "disabled."));
 		if (Minecraft.getInstance().player != null) {

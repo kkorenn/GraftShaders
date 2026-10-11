@@ -1,6 +1,5 @@
 package net.irisshaders.iris.gui.element.screen;
 
-import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.irisshaders.iris.gl.uniform.FloatSupplier;
 import net.irisshaders.iris.gui.GuiUtil;
@@ -35,8 +34,6 @@ public class IrisButton extends Button {
 		//guiGraphics.flush();
 		// TODO 1.21.6
 		//RenderSystem.setShaderColor(1.0F, 1.0F, 1.0F, this.isHoveredOrFocused() ? this.alphaSupplier.getAsFloat() * 1.8f : this.alphaSupplier.getAsFloat());
-		GlStateManager._enableBlend();
-		GlStateManager._enableDepthTest();
 		GuiUtil.bindIrisWidgetsTexture();
 		GuiUtil.drawButton(guiGraphics, this.getX(), this.getY(), this.getWidth(), this.getHeight(), this.isHoveredOrFocused(), !this.isActive());
 		//guiGraphics.flush();

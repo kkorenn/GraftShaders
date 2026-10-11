@@ -1,19 +1,18 @@
 {
   "schemaVersion": 1,
-  "id": "iris",
+  "id": "graftshaders",
   "version": "${version}",
-  "name": "Iris",
-  "description": "A modern shaders mod for Minecraft intended to be compatible with existing OptiFine shader packs",
+  "name": "Graft Shaders",
+  "description": "Iris shaders ported to Apple Metal. Fork of Iris (LGPL-3.0); requires Graft.",
   "authors": [
     "coderbot",
     "IMS212",
     "Justsnoopy30",
-    "FoundationGames"
+    "FoundationGames",
+    "Graft Shaders contributors"
   ],
   "contact": {
-    "homepage": "https://github.com/IrisShaders/Iris",
-    "sources": "https://github.com/IrisShaders/Iris.git",
-    "issues": "https://github.com/IrisShaders/Iris/issues"
+    "sources": "https://github.com/IrisShaders/Iris (upstream)"
   },
   "license": "LGPL-3.0-only",
   "icon": "assets/iris/textures/gui/iris-logo.png",
@@ -39,10 +38,11 @@
   "accessWidener": "iris.accesswidener",
   "depends": {
     "fabricloader": ">=0.12.3",
-
     "sodium": [
       "0.8.x"
-    ]
+    ],
+    "graft": ">=1.0.0",
+    "minecraft": "1.21.11"
   },
   "breaks": {
     "embeddium": "*",
@@ -75,5 +75,8 @@
       "net/minecraft/class_1921": ["net/irisshaders/iris/mixinterface/RenderTypeInterface"],
       "net/minecraft/class_759": ["net/irisshaders/iris/mixinterface/ItemInHandInterface"]
     }
-  }
+  },
+  "provides": [
+    "iris"
+  ]
 }

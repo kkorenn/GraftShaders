@@ -41,17 +41,14 @@ public class RenderTarget {
 		this.height = builder.height;
 
 
-		this.mainTexture = GlStateManager._genTexture();
-		this.altTexture = GlStateManager._genTexture();
+		this.mainTexture = IrisRenderSystem.createTexture(GL11C.GL_TEXTURE_2D);
+		this.altTexture = IrisRenderSystem.createTexture(GL11C.GL_TEXTURE_2D);
 
 		boolean isPixelFormatInteger = builder.internalFormat.getPixelFormat().isInteger();
 		this.allowsLinear = !isPixelFormatInteger;
 		setupTexture(mainTexture, builder.width, builder.height, !isPixelFormatInteger, false);
 		setupTexture(altTexture, builder.width, builder.height, !isPixelFormatInteger, true);
 
-		// Clean up after ourselves
-		// This is strictly defensive to ensure that other buggy code doesn't tamper with our textures
-		GlStateManager._bindTexture(0);
 	}
 
 	public static Builder builder() {
@@ -119,8 +116,8 @@ public class RenderTarget {
 		requireValid();
 		isValid = false;
 
-		GlStateManager._deleteTexture(mainTexture);
-		GlStateManager._deleteTexture(altTexture);
+		net.irisshaders.iris.metal.MetalTextureIds.delete(mainTexture);
+		net.irisshaders.iris.metal.MetalTextureIds.delete(altTexture);
 	}
 
 	private void requireValid() {

@@ -42,7 +42,6 @@ public final class PartialShader {
 	private static void detachIfValid(int i, int s) {
 		if (s >= 0) {
 			IrisRenderSystem.detachShader(i, s);
-			GlStateManager.glDeleteShader(s);
 		}
 	}
 

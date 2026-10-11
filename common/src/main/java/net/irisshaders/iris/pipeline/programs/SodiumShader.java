@@ -2,7 +2,7 @@ package net.irisshaders.iris.pipeline.programs;
 
 import com.google.common.collect.ImmutableSet;
 import com.mojang.blaze3d.opengl.GlBuffer;
-import com.mojang.blaze3d.opengl.GlSampler;
+import net.irisshaders.iris.gl.sampler.GlSampler;
 import com.mojang.blaze3d.opengl.GlStateManager;
 import com.mojang.blaze3d.opengl.GlTexture;
 import com.mojang.blaze3d.systems.RenderSystem;
@@ -195,7 +195,7 @@ public class SodiumShader implements ChunkShaderInterface {
 
 
 		if (isShadowPass) {
-			GlStateManager._disableCull();
+			net.irisshaders.iris.metal.GraftShadersState.ignoredState(); // MetalProgram drops culling in the shadow pass
 		}
 
 		var textureAtlas = Minecraft.getInstance()
@@ -225,7 +225,7 @@ public class SodiumShader implements ChunkShaderInterface {
 		int maxAnisotropy = Minecraft.getInstance().options.textureFiltering().get() == TextureFilteringMethod.ANISOTROPIC
 			? Minecraft.getInstance().options.maxAnisotropyValue()
 			: 1;
-		bindTextures(pass.getAtlas(), (GlSampler) IrisSamplers.getTerrainCache(maxAnisotropy)); // oh no
+		bindTextures(pass.getAtlas(), IrisSamplers.getTerrainCacheIris(maxAnisotropy));
 
 		if (containsTessellation) {
 			ImmediateState.usingTessellation = true;
@@ -233,17 +233,12 @@ public class SodiumShader implements ChunkShaderInterface {
 	}
 
 	private void bindTextures(GpuTextureView atlas, GlSampler sampler) {
+		// Metal: whole atlas mip chain (no GL_TEXTURE_BASE/MAX_LEVEL); lightmap gets its texture's default sampler.
 		IrisRenderSystem.bindTextureToUnit(GL20C.GL_TEXTURE_2D, 0, atlas.texture().iris$getGlId());
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
-		GlStateManager._texParameter(3553, 33084, atlas.baseMipLevel());
-		GlStateManager._texParameter(3553, 33085, atlas.baseMipLevel() + atlas.mipLevels() - 1);
-		GL33C.glBindSampler(0, sampler.getId());
-
+		IrisRenderSystem.bindSamplerToUnit(0, sampler.getId());
 		GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
-		GL33C.glBindSampler(2, ((GlSampler) RenderSystem.getSamplerCache().getSampler(AddressMode.CLAMP_TO_EDGE, AddressMode.CLAMP_TO_EDGE, FilterMode.LINEAR, FilterMode.LINEAR, false)).getId());
-
 		IrisRenderSystem.bindTextureToUnit(GL20C.GL_TEXTURE_2D, 2, lightmap.texture().iris$getGlId());
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0 + IrisSamplers.LIGHTMAP_TEXTURE_UNIT);
+		IrisRenderSystem.bindSamplerToUnit(2, 0);
 	}
 
 	private void applyBlendModes() {
