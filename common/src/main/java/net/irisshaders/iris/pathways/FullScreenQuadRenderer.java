@@ -39,4 +39,8 @@ public class FullScreenQuadRenderer {
 	public GpuBuffer getQuad() {
 		return quad;
 	}
+
+	public void bind() {
+		// Metal: the quad is bound with RenderPass.setVertexBuffer by the caller.
+	}
 }

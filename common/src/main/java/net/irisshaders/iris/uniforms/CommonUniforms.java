@@ -89,7 +89,8 @@ public final class CommonUniforms {
 		});
 
 		uniforms.uniform2i("gtextureSize", () -> {
-			int glId = GlStateManagerAccessor.getTEXTURES()[0].binding;
+			var albedo = com.mojang.blaze3d.systems.RenderSystem.getShaderTexture(0); // Metal: no GL binding to read
+			int glId = albedo != null ? albedo.texture().iris$getGlId() : 0;
 
 			TextureInfo info = TextureInfoCache.INSTANCE.getInfo(glId);
 			return new Vector2i(info.getWidth(), info.getHeight());

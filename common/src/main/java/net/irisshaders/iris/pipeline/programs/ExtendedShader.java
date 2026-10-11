@@ -126,7 +126,7 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
 		ProgramUniforms.Builder uniformBuilder = ProgramUniforms.builder(string, programId);
 		ProgramSamplers.Builder samplerBuilder = ProgramSamplers.builder(programId, IrisSamplers.WORLD_RESERVED_TEXTURE_UNITS);
 		uniformCreator.accept(uniformBuilder);
-		this.normalMat = GlStateManager._glGetUniformLocation(programId, "iris_NormalMat");
+		this.normalMat = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "iris_NormalMat");
 		ProgramImages.Builder builder = ProgramImages.builder(programId);
 		samplerCreator.accept(samplerBuilder, builder);
 		customUniforms.mapholderToPass(uniformBuilder, this);
@@ -144,8 +144,8 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
 		this.alphaTest = alphaTest.reference();
 		this.parent = parent;
 
-		this.modelViewInverse = GlStateManager._glGetUniformLocation(programId, "iris_ModelViewMatInverse");
-		this.projectionInverse = GlStateManager._glGetUniformLocation(programId, "iris_ProjMatInverse");
+		this.modelViewInverse = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "iris_ModelViewMatInverse");
+		this.projectionInverse = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "iris_ProjMatInverse");
 
 		this.intensitySwizzle = isIntensity;
 	}
@@ -178,7 +178,7 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
 		}
 
 		CapturedRenderingState.INSTANCE.setCurrentAlphaTest(alphaTest);
-		GlStateManager._glUseProgram(getProgramId());
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(getProgramId());
 
 		if (modelViewInverse > -1) {
 			IrisRenderSystem.uniformMatrix4fv(modelViewInverse, false, RenderSystem.getModelViewMatrix().invert(tempMatrix4f).get(tempFloats));
@@ -211,7 +211,7 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
 
 		images.update();
 
-		//GL46C.glUniform1i(GlStateManager._glGetUniformLocation(getProgramId(), "iris_overlay"), 1);
+		//net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(net.irisshaders.iris.metal.GraftShadersState.uniformLocation(getProgramId(), "iris_overlay"), 1);
 		BlendModeOverride.restore();
 
 		if (this.blendModeOverride != null) {
@@ -240,11 +240,19 @@ public class ExtendedShader extends GlProgram implements IrisProgram {
 
 	@Override
 	public int iris$getBlockIndex(int program, CharSequence uniformBlockName) {
-		return GL46C.glGetUniformBlockIndex(program, "iris_" + uniformBlockName);
+        if (((String) uniformBlockName).contains("u_")) {
+            return net.irisshaders.iris.metal.GraftShadersState.blockBinding(program, uniformBlockName.toString());
+        }
+		return net.irisshaders.iris.metal.GraftShadersState.blockBinding(program, "iris_" + uniformBlockName.toString());
 	}
 
 	@Override
 	public boolean iris$isSetUp() {
 		return isSetup;
+	}
+
+	@Override
+	public void close() {
+		net.irisshaders.iris.metal.MetalProgram.delete(getProgramId());
 	}
 }

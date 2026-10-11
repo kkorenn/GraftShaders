@@ -199,7 +199,7 @@ public class CompositeRenderer {
 		this.passes = passes.build();
 		this.flippedAtLeastOnceFinal = flippedAtLeastOnce.build();
 
-		GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
 	}
 
 	private boolean hasComputes(ComputeSource[][] computes) {
@@ -278,63 +278,67 @@ public class CompositeRenderer {
 		com.mojang.blaze3d.pipeline.RenderTarget main = Minecraft.getInstance().getMainRenderTarget();
 
 		GpuBuffer indices = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS).getBuffer(6);
-		VertexFormat.IndexType type = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS).type();
+		var type = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS).type();
 
-		try (RenderPass renderPass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "Composites", Minecraft.getInstance().getMainRenderTarget().getColorTextureView(), OptionalInt.empty())) {
-			renderPass.setPipeline(COMPOSITE_PIPELINE);
-			renderPass.setIndexBuffer(indices, type);
-			renderPass.setVertexBuffer(0, FullScreenQuadRenderer.INSTANCE.getQuad());
+		FullScreenQuadRenderer.INSTANCE.bind();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
-			for (int i = 0, passesSize = passes.size(); i < passesSize; i++) {
-				Pass compositePass = passes.get(i);
-				GLDebug.pushGroup(20 * this.compositePass.ordinal() + i, compositePass.name);
-				boolean ranCompute = false;
-				for (ComputeProgram computeProgram : compositePass.computes) {
-					if (computeProgram != null) {
-						ranCompute = true;
-						computeProgram.use();
-						this.customUniforms.push(computeProgram);
-						computeProgram.dispatch(main.width, main.height);
-					}
+		for (int i = 0, passesSize = passes.size(); i < passesSize; i++) {
+			Pass compositePass = passes.get(i);
+			GLDebug.pushGroup(20 * this.compositePass.ordinal() + i, compositePass.name);
+			boolean ranCompute = false;
+			for (ComputeProgram computeProgram : compositePass.computes) {
+				if (computeProgram != null) {
+					ranCompute = true;
+					computeProgram.use();
+					this.customUniforms.push(computeProgram);
+					computeProgram.dispatch(main.width, main.height);
 				}
+			}
 
-				if (ranCompute) {
-					IrisRenderSystem.memoryBarrier(GL43C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_SHADER_STORAGE_BARRIER_BIT);
+			if (ranCompute) {
+				IrisRenderSystem.memoryBarrier(GL43C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_SHADER_STORAGE_BARRIER_BIT);
+			}
+
+			Program.unbind();
+
+			if (compositePass instanceof ComputeOnlyPass) {
+				GLDebug.popGroup();
+				continue;
+			}
+
+			if (!compositePass.mipmappedBuffers.isEmpty()) {
+				net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
+				for (int index : compositePass.mipmappedBuffers) {
+					setupMipmapping(CompositeRenderer.this.renderTargets.get(index), compositePass.stageReadsFromAlt.contains(index));
 				}
+			}
 
-				Program.unbind();
-
-				if (compositePass instanceof ComputeOnlyPass) {
-					GLDebug.popGroup();
-					continue;
-				}
-
-				if (!compositePass.mipmappedBuffers.isEmpty()) {
-					GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
-
-					for (int index : compositePass.mipmappedBuffers) {
-						setupMipmapping(CompositeRenderer.this.renderTargets.get(index), compositePass.stageReadsFromAlt.contains(index));
-					}
-				}
-
+			// Metal: one render pass per composite pass. The pass is its own CustomPass, so the draw hook binds its
+			// framebuffer (retargeting the encoder) and draws with the composite program.
+			try (com.mojang.blaze3d.systems.RenderPass renderPass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(
+				() -> "Iris " + compositePass.name, main.getColorTextureView(), OptionalInt.empty())) {
+				renderPass.setPipeline(COMPOSITE_PIPELINE);
+				renderPass.setIndexBuffer(indices, type);
+				renderPass.setVertexBuffer(0, FullScreenQuadRenderer.INSTANCE.getQuad());
 				renderPass.iris$setCustomPass(compositePass);
-
+				// Pack-scaled passes (scale.compositeN) render a sub-rectangle, as upstream's viewport + scissor do.
 				float scaledWidth = compositePass.viewWidth * compositePass.viewportScale.scale();
 				float scaledHeight = compositePass.viewHeight * compositePass.viewportScale.scale();
 				int beginWidth = (int) (compositePass.viewWidth * compositePass.viewportScale.viewportX());
 				int beginHeight = (int) (compositePass.viewHeight * compositePass.viewportScale.viewportY());
-				GlStateManager._viewport(beginWidth, beginHeight, (int) scaledWidth, (int) scaledHeight);
-
+				boolean full = beginWidth == 0 && beginHeight == 0 && (int) scaledWidth == compositePass.viewWidth && (int) scaledHeight == compositePass.viewHeight;
+				net.irisshaders.iris.metal.GraftShadersState.passViewport = full ? null : new int[]{beginWidth, beginHeight, (int) scaledWidth, (int) scaledHeight};
+				compositePass.setupState();
 				compositePass.program.use();
-
 				// program is the identifier for composite :shrug:
 				this.customUniforms.push(compositePass.program);
-
 				renderPass.drawIndexed(0, 0, 6, 1);
-
-				BlendModeOverride.restore();
-				GLDebug.popGroup();
 			}
+			net.irisshaders.iris.metal.GraftShadersState.passViewport = null;
+
+			BlendModeOverride.restore();
+			GLDebug.popGroup();
 		}
 
 
@@ -342,19 +346,13 @@ public class CompositeRenderer {
 		// Also bind the "main" framebuffer if it isn't already bound.
 		ProgramUniforms.clearActiveUniforms();
 		ProgramSamplers.clearActiveSamplers();
-		GlStateManager._glUseProgram(0);
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(0);
 
 		// NB: Unbinding all of these textures is necessary for proper shaderpack reloading.
-		for (int i = 0; i < SamplerLimits.get().getMaxTextureUnits(); i++) {
-			// Unbind all textures that we may have used.
-			// NB: This is necessary for shader pack reloading to work propely
-			if (GlStateManagerAccessor.getTEXTURES()[i].binding != 0) {
-				GlStateManager._activeTexture(GL15C.GL_TEXTURE0 + i);
-				GlStateManager._bindTexture(0);
-			}
-		}
+		java.util.Arrays.fill(net.irisshaders.iris.metal.GraftShadersState.unitTextures, 0);
 
-		GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 
 		GLDebug.popGroup();
 
@@ -513,12 +511,13 @@ public class CompositeRenderer {
 
 		@Override
 		public void setupState() {
+			net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 			framebuffer.bind();
 			if (blendModeOverride != null) {
 				blendModeOverride.apply();
 			} else {
 				BlendModeStorage.restoreBlend();
-				GlStateManager._disableBlend();
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 			}
 		}
 	}

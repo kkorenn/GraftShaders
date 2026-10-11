@@ -66,7 +66,11 @@ public class GlImage extends GlResource {
 		IrisRenderSystem.texParameteri(texture, target.getGlType(), GL20C.GL_TEXTURE_MAX_LOD, 0);
 		IrisRenderSystem.texParameterf(texture, target.getGlType(), GL20C.GL_TEXTURE_LOD_BIAS, 0.0F);
 
-		ARBClearTexture.glClearTexImage(texture, 0, format.getGlFormat(), pixelType.getGlFormat(), (int[]) null);
+		clear();
+	}
+
+	public void clear() {
+		net.irisshaders.iris.gl.IrisRenderSystem.clearTexture(getGlId());
 	}
 
 	public String getName() {
@@ -101,7 +105,7 @@ public class GlImage extends GlResource {
 
 	@Override
 	protected void destroyInternal() {
-		GlStateManager._deleteTexture(getGlId());
+		net.irisshaders.iris.metal.MetalTextureIds.delete(getGlId());
 	}
 
 	public InternalTextureFormat getInternalFormat() {

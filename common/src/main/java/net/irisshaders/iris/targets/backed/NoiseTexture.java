@@ -38,7 +38,7 @@ public class NoiseTexture extends GlResource {
 
 		GLDebug.nameObject(GL43C.GL_TEXTURE, texture, "noise texture");
 
-		GlStateManager._bindTexture(0);
+		net.irisshaders.iris.metal.GraftShadersState.bindTexture(0);
 	}
 
 	void resize(int texture, int width, int height) {
@@ -50,10 +50,10 @@ public class NoiseTexture extends GlResource {
 		TextureUploadHelper.resetTextureUploadState();
 
 		// Since we're using tightly-packed RGB data, we must use an alignment of 1 byte instead of the usual 4 bytes.
-		GlStateManager._pixelStore(GL20C.GL_UNPACK_ALIGNMENT, 1);
-		IrisRenderSystem.texImage2D(texture, GL11C.GL_TEXTURE_2D, 0, GL11C.GL_RGB, width, height, 0, GL11C.GL_RGB, GL11C.GL_UNSIGNED_BYTE, pixels);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
+		IrisRenderSystem.texImage2D(texture, GL11C.GL_TEXTURE_2D, 0, GL11C.GL_RGB8, width, height, 0, GL11C.GL_RGB, GL11C.GL_UNSIGNED_BYTE, pixels);
 
-		GlStateManager._bindTexture(0);
+		net.irisshaders.iris.metal.GraftShadersState.bindTexture(0);
 	}
 
 	private ByteBuffer generateNoise() {
@@ -75,6 +75,6 @@ public class NoiseTexture extends GlResource {
 
 	@Override
 	protected void destroyInternal() {
-		GlStateManager._deleteTexture(getGlId());
+		net.irisshaders.iris.metal.MetalTextureIds.delete(getGlId());
 	}
 }
