@@ -1,3 +1,40 @@
+# Graft Shaders
+
+A fork of [Iris](https://github.com/IrisShaders/Iris) that runs shader packs on [Graft](https://github.com/kkorenn/Graft), the native Apple Metal renderer for Minecraft. Apple Silicon Macs only. Part of [Honeycrisp Client](https://github.com/kkorenn/HoneycrispClient).
+
+Each Minecraft version lives on its own branch:
+
+| Minecraft | Branch |
+|---|---|
+| 26.2 | `metal` (default) |
+| 26.3 | `metal-26.3` |
+| 1.21.11 | `metal-1.21.11` |
+| 1.21.10 | `metal-1.21.10` |
+| 1.21.8 | `metal-1.21.8` |
+
+This branch is **Minecraft 26.2**.
+
+## Install
+
+Put these in your Fabric `mods` folder: `graftshaders-26.2-*.jar` from [Releases](https://github.com/kkorenn/GraftShaders/releases), the matching `graft-26.2-*.jar` from [Graft](https://github.com/kkorenn/Graft/releases), and [Sodium](https://modrinth.com/mod/sodium). The mod id is `graftshaders`; it provides `iris`, so mods that expect Iris keep working.
+
+## Build
+
+Clone Graft next to this repo and build it first, because Graft Shaders compiles against Graft's jar at `../Graft`:
+
+```sh
+git clone https://github.com/kkorenn/Graft
+git clone -b metal https://github.com/kkorenn/GraftShaders
+(cd Graft && ./gradlew build)
+cd GraftShaders && ./gradlew build
+```
+
+JDK 25 is required. License: LGPL-3.0, same as Iris. Not affiliated with the Iris project.
+
+---
+
+*Upstream Iris README follows.*
+
 ![Iris: An open-source shaders mod compatible with OptiFine shader packs](docs/banner.png)
 
 # Iris

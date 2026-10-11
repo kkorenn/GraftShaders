@@ -25,7 +25,7 @@ public class ShaderMap {
 		loadingMap.forAllShaders((key, shader) -> {
 			if (shader != null) {
 				if (deletionFunction.apply(shader)) {
-					GlStateManager.glDeleteProgram(shader.id().program());
+					net.irisshaders.iris.metal.MetalProgram.delete(shader.id().program());
 					return;
 				}
 
@@ -38,15 +38,7 @@ public class ShaderMap {
 	}
 
 	private void checkLinkingState(ShaderKey key, ShaderSupplier shader) {
-		int i = shader.id().program();
-
-		int j = GlStateManager.glGetProgrami(i, 35714);
-		if (j == GL46C.GL_FALSE) {
-			String string = GlStateManager.glGetProgramInfoLog(i, 32768);
-			throw new ShaderCompileException(
-				key.name(), string
-			);
-		}
+		// Metal programs are compiled and validated when linked (MetalGlsl); nothing to check here.
 	}
 
 	public GlProgram getShader(ShaderKey id) {

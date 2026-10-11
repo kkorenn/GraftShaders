@@ -129,7 +129,7 @@ public class PBRTextureManager {
 			Class<? extends AbstractTexture> clazz = texture.getClass();
 			PBRTextureLoader loader = PBRTextureLoaderRegistry.INSTANCE.getLoader(clazz);
 			if (loader != null) {
-				int previousTextureBinding = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
+				int previousTextureBinding = net.irisshaders.iris.metal.GraftShadersState.unitTextures[net.irisshaders.iris.metal.GraftShadersState.activeUnit];
 				consumer.clear();
 				try {
 					loader.load(texture, Minecraft.getInstance().getResourceManager(), consumer);
@@ -137,7 +137,7 @@ public class PBRTextureManager {
 				} catch (Exception e) {
 					Iris.logger.warn("Failed to load PBR textures for texture " + id, e);
 				} finally {
-					GlStateManager._bindTexture(previousTextureBinding);
+					net.irisshaders.iris.metal.GraftShadersState.bindTexture(previousTextureBinding);
 				}
 			}
 		}

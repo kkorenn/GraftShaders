@@ -6,7 +6,7 @@ plugins {
 
 val MINECRAFT_VERSION by extra { "26.2" }
 val NEOFORGE_VERSION by extra { "26.2.0.0-beta" }
-val FABRIC_LOADER_VERSION by extra { "0.19.2" }
+val FABRIC_LOADER_VERSION by extra { "0.19.5" }
 val FABRIC_API_VERSION by extra { "0.152.1+26.2" }
 
 val SODIUM_DEPENDENCY_FABRIC by extra { "net.caffeinemc:sodium-fabric:0.9.2+mc26.2" }

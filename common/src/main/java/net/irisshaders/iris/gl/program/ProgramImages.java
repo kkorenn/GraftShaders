@@ -28,7 +28,7 @@ public class ProgramImages {
 	public void update() {
 		if (initializer != null) {
 			for (GlUniform1iCall call : initializer) {
-				GlStateManager._glUniform1i(call.location(), call.value());
+				net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(call.location(), call.value());
 			}
 
 			initializer = null;
@@ -60,12 +60,12 @@ public class ProgramImages {
 
 		@Override
 		public boolean hasImage(String name) {
-			return GlStateManager._glGetUniformLocation(program, name) != -1;
+			return net.irisshaders.iris.metal.GraftShadersState.uniformLocation(program, name) != -1;
 		}
 
 		@Override
 		public void addTextureImage(IntSupplier textureID, InternalTextureFormat internalFormat, String name) {
-			int location = GlStateManager._glGetUniformLocation(program, name);
+			int location = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(program, name);
 
 			if (location == -1) {
 				return;

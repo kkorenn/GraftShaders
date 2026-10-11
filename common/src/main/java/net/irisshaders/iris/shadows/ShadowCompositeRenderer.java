@@ -156,7 +156,7 @@ public class ShadowCompositeRenderer {
 		this.passes = passes.build();
 		this.flippedAtLeastOnceFinal = flippedAtLeastOnce.build();
 
-		GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
 	}
 
 	private static void setupMipmapping(net.irisshaders.iris.targets.RenderTarget target, boolean readFromAlt) {
@@ -226,7 +226,7 @@ public class ShadowCompositeRenderer {
 				}
 
 				if (!renderPass.mipmappedBuffers.isEmpty()) {
-					GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+					net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 
 					for (int index : renderPass.mipmappedBuffers) {
 						setupMipmapping(renderTargets.get(index), renderPass.stageReadsFromAlt.contains(index));
@@ -239,9 +239,9 @@ public class ShadowCompositeRenderer {
 				float scaledHeight = renderTargets.getResolution() * renderPass.viewportScale.scale();
 				int beginWidth = (int) (renderTargets.getResolution() * renderPass.viewportScale.viewportX());
 				int beginHeight = (int) (renderTargets.getResolution() * renderPass.viewportScale.viewportY());
-				GlStateManager._viewport(beginWidth, beginHeight, (int) scaledWidth, (int) scaledHeight);
-				GlStateManager._scissorBox(beginWidth, beginHeight, (int) scaledWidth, (int) scaledHeight);
-				GlStateManager._disableScissorTest();
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 				renderPass.framebuffer.bind();
 				renderPass.program.use();
@@ -254,7 +254,7 @@ public class ShadowCompositeRenderer {
 
 		// Make sure to reset the viewport to how it was before... Otherwise weird issues could occur.
 		ProgramUniforms.clearActiveUniforms();
-		GlStateManager._glUseProgram(0);
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(0);
 
 		// TODO IMS: Apparantly we are not supposed to do this for shadowcomp...
 		/*
@@ -266,7 +266,7 @@ public class ShadowCompositeRenderer {
 		}
 		 */
 
-		GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 	}
 
 	// TODO: Don't just copy this from DeferredWorldRenderingPipeline
@@ -390,7 +390,7 @@ public class ShadowCompositeRenderer {
 				blendModeOverride.apply();
 			} else {
 				BlendModeStorage.restoreBlend();
-				GlStateManager._disableBlend(0);
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 			}
 		}
 	}

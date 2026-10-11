@@ -30,7 +30,7 @@ public class TextureInfoCache {
 	public void onTexImage2D(int target, int level, int internalformat, int width, int height, int border,
 							 int format, int type, @Nullable ByteBuffer pixels) {
 		if (level == 0) {
-			int id = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
+			int id = net.irisshaders.iris.metal.GraftShadersState.unitTextures[net.irisshaders.iris.metal.GraftShadersState.activeUnit];
 			TextureInfo info = getInfo(id);
 			info.internalFormat = internalformat;
 			info.width = width;
@@ -78,17 +78,16 @@ public class TextureInfoCache {
 		}
 
 		private int fetchLevelParameter(int pname) {
-			// Keep track of what texture was bound before
-			int previousTextureBinding = GlStateManager._getInteger(GL20C.GL_TEXTURE_BINDING_2D);
-
-			// Bind this texture and grab the parameter from it.
-			GlStateManager._bindTexture(id);
-			int parameter = GlStateManager._getTexLevelParameter(GL20C.GL_TEXTURE_2D, 0, pname);
-
-			// Make sure to re-bind the previous texture to avoid issues.
-			GlStateManager._bindTexture(previousTextureBinding);
-
-			return parameter;
+			// Metal: read the size straight off the texture behind this id.
+			com.mojang.blaze3d.textures.GpuTexture texture = net.irisshaders.iris.metal.MetalTextureIds.get(id);
+			if (texture == null) {
+				return 0;
+			}
+			return switch (pname) {
+				case GL20C.GL_TEXTURE_WIDTH -> texture.getWidth(0);
+				case GL20C.GL_TEXTURE_HEIGHT -> texture.getHeight(0);
+				default -> throw new UnsupportedOperationException("Graft Shaders: texture level parameter 0x" + Integer.toHexString(pname));
+			};
 		}
 	}
 }

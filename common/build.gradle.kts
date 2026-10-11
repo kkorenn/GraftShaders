@@ -5,6 +5,9 @@ plugins {
     id("com.github.gmazzo.buildconfig") version "5.3.5"
 }
 
+// Graft checkout: next to this repo (../Graft) or, in the HoneycrispEco layout, two levels up.
+val graftDir = if (rootProject.file("../Graft/settings.gradle").exists()) "../Graft" else "../../Graft"
+
 repositories {
     mavenLocal()
     maven("https://maven.parchmentmc.org/")
@@ -50,6 +53,9 @@ buildConfig {
 }
 
 dependencies {
+    // Graft (required mod): the Metal renderer Graft Shaders draws through.
+    compileOnly(files(rootProject.file("$graftDir/mc26_2/build/libs/graft-26.2-1.0.0.jar")))
+
     minecraft(group = "com.mojang", name = "minecraft", version = MINECRAFT_VERSION)
 
     implementation("net.fabricmc:fabric-loader:$FABRIC_LOADER_VERSION")
@@ -200,4 +206,18 @@ tasks {
 // This trick hides common tasks in the IDEA list.
 tasks.configureEach {
     group = null
+}
+
+// Headless check of the GLSL -> Metal linker on the real GPU (no game window): ./gradlew :common:linkerTest
+dependencies {
+    testImplementation(files(rootProject.file("$graftDir/mc26_2/build/libs/graft-26.2-1.0.0.jar")))
+    testRuntimeOnly("org.lwjgl:lwjgl:3.4.1:natives-macos-arm64")
+    testRuntimeOnly("org.lwjgl:lwjgl-shaderc:3.4.1:natives-macos-arm64")
+    testRuntimeOnly("org.lwjgl:lwjgl-spvc:3.4.1:natives-macos-arm64")
+}
+
+tasks.register<JavaExec>("linkerTest") {
+    classpath = sourceSets["test"].runtimeClasspath
+    mainClass.set("net.irisshaders.iris.metal.MetalGlslTest")
+    jvmArgs("--enable-native-access=ALL-UNNAMED", "-ea")
 }

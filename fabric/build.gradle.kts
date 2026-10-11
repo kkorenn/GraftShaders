@@ -4,6 +4,9 @@ plugins {
     id("net.fabricmc.fabric-loom") version("1.17.20")
 }
 
+// Graft checkout: next to this repo (../Graft) or, in the HoneycrispEco layout, two levels up.
+val graftDir = if (rootProject.file("../Graft/settings.gradle").exists()) "../Graft" else "../../Graft"
+
 evaluationDependsOn(":common")
 
 val MINECRAFT_VERSION: String by rootProject.extra
@@ -34,10 +37,13 @@ repositories {
 }
 
 base {
-    archivesName.set("iris-fabric")
+    archivesName.set("graftshaders-fabric")
 }
 
 dependencies {
+    // Graft (required mod): the Metal renderer Graft Shaders draws through.
+    implementation(files(rootProject.file("$graftDir/mc26_2/build/libs/graft-26.2-1.0.0.jar")))
+
     minecraft("com.mojang:minecraft:${MINECRAFT_VERSION}")
 
     implementation("net.fabricmc:fabric-loader:$FABRIC_LOADER_VERSION")

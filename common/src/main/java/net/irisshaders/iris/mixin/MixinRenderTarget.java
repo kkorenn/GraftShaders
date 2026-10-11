@@ -62,7 +62,25 @@ public class MixinRenderTarget implements Blaze3dRenderTargetExt, RenderTargetIn
 
 	@Override
 	public void iris$bindFramebuffer() {
-		var fbo = IrisRenderSystem.getGlDevice().frameBufferCache().getFbo(IrisRenderSystem.getGlDevice().directStateAccess(), List.of((FrameBufferAttachment) this.colorTexture), (FrameBufferAttachment) this.depthTexture);
-		GlStateManager._glBindFramebuffer(GlConst.GL_FRAMEBUFFER, fbo);
+		int color = this.colorTexture != null ? this.colorTexture.iris$getGlId() : 0;
+		int depth = this.depthTexture != null ? this.depthTexture.iris$getGlId() : 0;
+		if (iris$framebuffer == 0 || iris$fbColor != color || iris$fbDepth != depth) {
+			if (iris$framebuffer != 0) {
+				net.irisshaders.iris.metal.MetalFramebuffers.delete(iris$framebuffer);
+			}
+			iris$framebuffer = net.irisshaders.iris.metal.MetalFramebuffers.create();
+			net.irisshaders.iris.metal.MetalFramebuffers.attach(iris$framebuffer, 0x8CE0, color);
+			net.irisshaders.iris.metal.MetalFramebuffers.attach(iris$framebuffer, 0x8D00, depth);
+			iris$fbColor = color;
+			iris$fbDepth = depth;
+		}
+		net.irisshaders.iris.metal.GraftShadersState.framebuffer = iris$framebuffer;
 	}
+
+	@Unique
+	private int iris$framebuffer;
+	@Unique
+	private int iris$fbColor;
+	@Unique
+	private int iris$fbDepth;
 }

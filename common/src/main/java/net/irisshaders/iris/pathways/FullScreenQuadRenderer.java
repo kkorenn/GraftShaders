@@ -49,6 +49,6 @@ public class FullScreenQuadRenderer {
 	}
 
 	public void bind() {
-		((GlDevice) ((GpuDeviceAccessor) RenderSystem.getDevice()).getBackend()).vertexArrayCache().bindVertexArray(new VertexFormat[] { DefaultVertexFormat.POSITION_TEX }, new GpuBufferSlice[] { quad.slice() }, null);
+		// Metal: the quad is bound with RenderPass.setVertexBuffer by the caller.
 	}
 }

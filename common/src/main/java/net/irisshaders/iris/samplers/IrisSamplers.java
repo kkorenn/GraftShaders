@@ -257,7 +257,7 @@ public class IrisSamplers {
 	public static GlSampler getTerrainCacheIris(int i) {
 		if (WorldRenderingSettings.INSTANCE.breaksAnisotropy()) i = 1;
 		if (terrainS[i] == null) {
-			terrainS[i] = new GlSampler(((com.mojang.blaze3d.opengl.GlSampler) getTerrainCache(i)).getId());
+			terrainS[i] = new GlSampler(net.irisshaders.iris.metal.MetalSamplers.wrap(((dev.graft.v26_2.MetalSampler) getTerrainCache(i)).mtl()));
 		}
 		return terrainS[i];
 	}

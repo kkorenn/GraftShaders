@@ -163,7 +163,7 @@ public class FinalPassRenderer {
 
 		this.swapPasses = swapPasses.build();
 
-		GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
 	}
 
 	private static void setupMipmapping(RenderTarget target, boolean readFromAlt) {
@@ -236,7 +236,7 @@ public class FinalPassRenderer {
 			IrisRenderSystem.memoryBarrier(GL43C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_SHADER_STORAGE_BARRIER_BIT);
 
 			if (!finalPass.mipmappedBuffers.isEmpty()) {
-				GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+				net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 
 				for (int index : finalPass.mipmappedBuffers) {
 					setupMipmapping(renderTargets.get(index), finalPass.stageReadsFromAlt.contains(index));
@@ -256,7 +256,7 @@ public class FinalPassRenderer {
 				finalPass.program.use();
 
 				BlendModeOverride.restore();
-				GlStateManager._disableBlend(0);
+				net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 				// program is the identifier for final :shrug:
 				this.customUniforms.push(finalPass.program);
@@ -280,7 +280,7 @@ public class FinalPassRenderer {
 			IrisRenderSystem.copyTexSubImage2D(main.getColorTexture().iris$getGlId(), GL11C.GL_TEXTURE_2D, 0, 0, 0, 0, 0, baseWidth, baseHeight);
 		}
 
-		GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 
 		for (int i = 0; i < renderTargets.getRenderTargetCount(); i++) {
 			// Reset mipmapping states at the end of the frame.
@@ -288,36 +288,20 @@ public class FinalPassRenderer {
 		}
 
 		for (SwapPass swapPass : swapPasses) {
-			// NB: We need to use bind(), not bindAsReadBuffer()... Previously we used bindAsReadBuffer() here which
-			//     broke TAA on many packs and on many drivers.
-			//
-			// Note that glCopyTexSubImage2D reads from the current GL_READ_BUFFER (given by glReadBuffer()) for the
-			// current framebuffer bound to GL_FRAMEBUFFER, but that is distinct from the current GL_READ_FRAMEBUFFER,
-			// which is what bindAsReadBuffer() binds.
-			//
-			// Also note that RenderTargets already calls readBuffer(0) for us.
+			// glCopyTexSubImage2D from the swap framebuffer's read buffer, done as a Metal texture copy.
 			swapPass.from.bind();
-
-			GlStateManager._bindTexture(swapPass.targetTexture);
-			GL46C.glCopyTexSubImage2D(GL20C.GL_TEXTURE_2D, 0, 0, 0, 0, 0, swapPass.width, swapPass.height);
+			IrisRenderSystem.copyTexSubImage2D(swapPass.targetTexture, GL20C.GL_TEXTURE_2D, 0, 0, 0, 0, 0, swapPass.width, swapPass.height);
 		}
 
 		// Make sure to reset the viewport to how it was before... Otherwise weird issues could occur.
 		// Also bind the "main" framebuffer if it isn't already bound.
 		ProgramUniforms.clearActiveUniforms();
 		ProgramSamplers.clearActiveSamplers();
-		GlStateManager._glUseProgram(0);
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(0);
 
-		for (int i = 0; i < SamplerLimits.get().getMaxTextureUnits(); i++) {
-			// Unbind all textures that we may have used.
-			// NB: This is necessary for shader pack reloading to work properly
-			if (GlStateManagerAccessor.getTEXTURES()[i].binding != 0) {
-				GlStateManager._activeTexture(GL15C.GL_TEXTURE0 + i);
-				GlStateManager._bindTexture(0);
-			}
-		}
+		java.util.Arrays.fill(net.irisshaders.iris.metal.GraftShadersState.unitTextures, 0);
 
-		GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 	}
 
 	public void recalculateSwapPassSize() {

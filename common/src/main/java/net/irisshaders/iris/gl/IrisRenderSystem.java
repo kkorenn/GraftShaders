@@ -1,372 +1,627 @@
 package net.irisshaders.iris.gl;
 
+import com.mojang.blaze3d.GpuFormat;
 import com.mojang.blaze3d.ProjectionType;
 import com.mojang.blaze3d.buffers.GpuBufferSlice;
-import com.mojang.blaze3d.opengl.GlDevice;
-import com.mojang.blaze3d.opengl.GlStateManager;
+import com.mojang.blaze3d.systems.CommandEncoder;
 import com.mojang.blaze3d.systems.RenderSystem;
-import com.mojang.blaze3d.vertex.VertexSorting;
-import it.unimi.dsi.fastutil.ints.IntArrayList;
-import it.unimi.dsi.fastutil.ints.IntList;
-import net.irisshaders.iris.Iris;
-import net.irisshaders.iris.gl.sampler.SamplerLimits;
-import net.irisshaders.iris.gl.texture.TextureType;
-import net.irisshaders.iris.mixin.GlStateManagerAccessor;
-import net.irisshaders.iris.mixin.GpuDeviceAccessor;
+import com.mojang.blaze3d.textures.GpuTexture;
+import dev.graft.metal.ObjC;
+import dev.graft.v26_2.MetalGpuDevice;
+import dev.graft.v26_2.MetalTexture;
+import net.irisshaders.iris.metal.MetalFormats;
+import net.irisshaders.iris.metal.MetalFramebuffers;
+import net.irisshaders.iris.metal.GraftShadersState;
+import net.irisshaders.iris.metal.MetalProgram;
+import net.irisshaders.iris.metal.MetalSamplers;
+import net.irisshaders.iris.metal.MetalTextureIds;
 import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.renderer.ProjectionMatrixBuffer;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix4f;
 import org.joml.Vector3i;
-import org.lwjgl.opengl.ARBDirectStateAccess;
-import org.lwjgl.opengl.ARBDrawBuffersBlend;
-import org.lwjgl.opengl.ARBTextureSwizzle;
-import org.lwjgl.opengl.EXTShaderImageLoadStore;
-import org.lwjgl.opengl.GL;
-import org.lwjgl.opengl.GL30C;
-import org.lwjgl.opengl.GL32C;
-import org.lwjgl.opengl.GL33C;
-import org.lwjgl.opengl.GL42C;
-import org.lwjgl.opengl.GL43C;
-import org.lwjgl.opengl.GL45C;
-import org.lwjgl.opengl.GL46C;
-import org.lwjgl.opengl.NVXGPUMemoryInfo;
+import org.joml.Vector4f;
 import org.lwjgl.system.MemoryUtil;
 
 import java.nio.ByteBuffer;
 import java.nio.FloatBuffer;
 import java.nio.IntBuffer;
+import java.util.Arrays;
 
 /**
- * This class is responsible for abstracting calls to OpenGL and asserting that calls are run on the render thread.
+ * Iris's render-system entry points, implemented on Metal (through Graft). Signatures are kept so the rest of Iris
+ * is unchanged; ids passed in are Graft Shaders keys (textures, framebuffers, programs, samplers), not GL objects.
+ * Features not ported yet throw, so a pack that needs them fails loudly instead of rendering garbage.
  */
 public class IrisRenderSystem {
-	private static final int[] emptyArray = new int[SamplerLimits.get().getMaxTextureUnits()];
 	private static GpuBufferSlice backupProjection;
 	private static ProjectionMatrixBuffer perspectiveProjectionMatrixBuffer;
 	private static ProjectionType backupProjectionType;
-	private static DSAAccess dsaState;
-	private static boolean hasMultibind;
-	private static boolean supportsCompute;
-	private static boolean supportsTesselation;
-	private static int polygonMode = GL43C.GL_FILL;
-	private static int backupPolygonMode = GL43C.GL_FILL;
-	private static int[] samplers;
-	private static final IntList textureToUnswizzle = new IntArrayList();
+	private static int polygonMode = 0x1B02;
+	private static int backupPolygonMode = 0x1B02;
+	private static int boundTexture;
+	private static boolean cullingState;
+
+	private static UnsupportedOperationException unported(String what) {
+		return new UnsupportedOperationException("Graft Shaders: " + what + " is not ported to Metal yet");
+	}
+
+	private static CommandEncoder encoder() {
+		return RenderSystem.getDevice().createCommandEncoder();
+	}
 
 	public static void initRenderer() {
-		if (GL.getCapabilities().OpenGL45) {
-			dsaState = new DSACore();
-			Iris.logger.info("OpenGL 4.5 detected, enabling DSA.");
-		} else if (GL.getCapabilities().GL_ARB_direct_state_access) {
-			dsaState = new DSAARB();
-			Iris.logger.info("ARB_direct_state_access detected, enabling DSA.");
-		} else {
-			dsaState = new DSAUnsupported();
-			Iris.logger.info("DSA support not detected.");
-		}
-
-		hasMultibind = GL.getCapabilities().OpenGL45 || GL.getCapabilities().GL_ARB_multi_bind;
 		perspectiveProjectionMatrixBuffer = new ProjectionMatrixBuffer("Iris shadow map projection");
-
-		supportsCompute = GL.getCapabilities().glDispatchCompute != MemoryUtil.NULL;
-		supportsTesselation = GL.getCapabilities().GL_ARB_tessellation_shader || GL.getCapabilities().OpenGL40;
-
-		samplers = new int[SamplerLimits.get().getMaxTextureUnits()];
 	}
 
-	public static void getIntegerv(int pname, int[] params) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glGetIntegerv(pname, params);
-	}
-
-	public static void getFloatv(int pname, float[] params) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glGetFloatv(pname, params);
-	}
-
-	public static void generateMipmaps(int texture, int mipmapTarget) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.generateMipmaps(texture, mipmapTarget);
-	}
-
-	public static void bindAttributeLocation(int program, int index, CharSequence name) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glBindAttribLocation(program, index, name);
-	}
-
-	public static void texImage1D(int texture, int target, int level, int internalformat, int width, int border, int format, int type, @Nullable ByteBuffer pixels) {
-		RenderSystem.assertOnRenderThread();
-		IrisRenderSystem.bindTextureForSetup(target, texture);
-		GL30C.glTexImage1D(target, level, internalformat, width, border, format, type, pixels);
-	}
-
-	public static void texImage2D(int texture, int target, int level, int internalformat, int width, int height, int border, int format, int type, @Nullable ByteBuffer pixels) {
-		RenderSystem.assertOnRenderThread();
-		IrisRenderSystem.bindTextureForSetup(target, texture);
-		GL32C.glTexImage2D(target, level, internalformat, width, height, border, format, type, pixels);
-	}
-
-	public static void texImage3D(int texture, int target, int level, int internalformat, int width, int height, int depth, int border, int format, int type, @Nullable ByteBuffer pixels) {
-		RenderSystem.assertOnRenderThread();
-		IrisRenderSystem.bindTextureForSetup(target, texture);
-		GL30C.glTexImage3D(target, level, internalformat, width, height, depth, border, format, type, pixels);
-	}
-
-	public static void uniformMatrix4fv(int location, boolean transpose, FloatBuffer matrix) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniformMatrix4fv(location, transpose, matrix);
-	}
-
-	public static void uniformMatrix4fv(int location, boolean transpose, float[] matrix) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniformMatrix4fv(location, transpose, matrix);
-	}
-
-	public static void copyTexImage2D(int target, int level, int internalFormat, int x, int y, int width, int height, int border) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glCopyTexImage2D(target, level, internalFormat, x, y, width, height, border);
-	}
-
-	public static void uniform1f(int location, float v0) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform1f(location, v0);
-	}
-
-	public static void uniform2f(int location, float v0, float v1) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform2f(location, v0, v1);
-	}
-
-	public static void uniform2i(int location, int v0, int v1) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform2i(location, v0, v1);
-	}
-
-	public static void uniform3f(int location, float v0, float v1, float v2) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform3f(location, v0, v1, v2);
-	}
-
-	public static void uniform3i(int location, int v0, int v1, int v2) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform3i(location, v0, v1, v2);
-	}
-
-	public static void uniform4f(int location, float v0, float v1, float v2, float v3) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform4f(location, v0, v1, v2, v3);
-	}
-
-	public static void uniform4i(int location, int v0, int v1, int v2, int v3) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniform4i(location, v0, v1, v2, v3);
-	}
-
-	public static void texParameteriv(int texture, int target, int pname, int[] params) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.texParameteriv(texture, target, pname, params);
-	}
-
-	/**
-	 * Internal API for use when you don't know the target texture. Should use {@link IrisRenderSystem#texParameteriv(int, int, int, int[])} instead unless you know what you're doing!
-	 */
-	public static void texParameterivDirect(int target, int pname, int[] params) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glTexParameteriv(target, pname, params);
-	}
-
-	public static void copyTexSubImage2D(int destTexture, int target, int i, int i1, int i2, int i3, int i4, int width, int height) {
-		dsaState.copyTexSubImage2D(destTexture, target, i, i1, i2, i3, i4, width, height);
-	}
-
-	public static void texParameteri(int texture, int target, int pname, int param) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.texParameteri(texture, target, pname, param);
-	}
-
-	public static void texParameterf(int texture, int target, int pname, float param) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.texParameterf(texture, target, pname, param);
-	}
-
-	public static String getProgramInfoLog(int program) {
-		RenderSystem.assertOnRenderThread();
-		return GL32C.glGetProgramInfoLog(program);
-	}
-
-	public static String getShaderInfoLog(int shader) {
-		RenderSystem.assertOnRenderThread();
-		return GL32C.glGetShaderInfoLog(shader);
-	}
-
-	public static void drawBuffers(int framebuffer, int[] buffers) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.drawBuffers(framebuffer, buffers);
-	}
-
-	public static void readBuffer(int framebuffer, int buffer) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.readBuffer(framebuffer, buffer);
-	}
-
-	public static void clearBufferfv(int framebuffer, int buffer, int drawbuffer, float[] values) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.clearBufferfv(framebuffer, buffer, drawbuffer, values);
-	}
-
-	public static void clearBufferiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.clearBufferiv(framebuffer, buffer, drawbuffer, values);
-	}
-
-	public static void clearBufferuiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-		RenderSystem.assertOnRenderThread();
-		dsaState.clearBufferuiv(framebuffer, buffer, drawbuffer, values);
-	}
-
-	public static String getActiveUniform(int program, int index, int size, IntBuffer type, IntBuffer name) {
-		RenderSystem.assertOnRenderThread();
-		return GL32C.glGetActiveUniform(program, index, size, type, name);
-	}
-
-	public static void readPixels(int x, int y, int width, int height, int format, int type, float[] pixels) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glReadPixels(x, y, width, height, format, type, pixels);
-	}
-
-	public static void bufferData(int target, float[] data, int usage) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glBufferData(target, data, usage);
-	}
-
-	public static int bufferStorage(int target, float[] data, int usage) {
-		RenderSystem.assertOnRenderThread();
-		return dsaState.bufferStorage(target, data, usage);
-	}
-
-	public static void bufferStorage(int target, long size, int flags) {
-		RenderSystem.assertOnRenderThread();
-		// The ARB version is identical to GL44 and redirects, so this should work on ARB as well.
-		GL45C.glBufferStorage(target, size, flags);
-	}
-
-	public static void bindBufferBase(int target, Integer index, int buffer) {
-		RenderSystem.assertOnRenderThread();
-		GL43C.glBindBufferBase(target, index, buffer);
-	}
-
-	public static void vertexAttrib4f(int index, float v0, float v1, float v2, float v3) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glVertexAttrib4f(index, v0, v1, v2, v3);
-	}
-
-	public static void detachShader(int program, int shader) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glDetachShader(program, shader);
-	}
-
-	public static void framebufferTexture2D(int fb, int fbtarget, int attachment, int target, int texture, int levels) {
-		dsaState.framebufferTexture2D(fb, fbtarget, attachment, target, texture, levels);
-	}
-
-	public static int getTexParameteri(int texture, int target, int pname) {
-		RenderSystem.assertOnRenderThread();
-		return dsaState.getTexParameteri(texture, target, pname);
-	}
-
-	public static void bindImageTexture(int unit, int texture, int level, boolean layered, int layer, int access, int format) {
-		RenderSystem.assertOnRenderThread();
-		if (GL.getCapabilities().OpenGL42 || GL.getCapabilities().GL_ARB_shader_image_load_store) {
-			GL42C.glBindImageTexture(unit, texture, level, layered, layer, access, format);
-		} else {
-			EXTShaderImageLoadStore.glBindImageTextureEXT(unit, texture, level, layered, layer, access, format);
-		}
-	}
-
-	public static int getMaxImageUnits() {
-		if (GL.getCapabilities().OpenGL42 || GL.getCapabilities().GL_ARB_shader_image_load_store) {
-			return GlStateManager._getInteger(GL42C.GL_MAX_IMAGE_UNITS);
-		} else if (GL.getCapabilities().GL_EXT_shader_image_load_store) {
-			return GlStateManager._getInteger(EXTShaderImageLoadStore.GL_MAX_IMAGE_UNITS_EXT);
-		} else {
-			return 0;
-		}
-	}
+	// ---- capabilities -------------------------------------------------------------------------------------------------
 
 	public static boolean supportsSSBO() {
-		return GL.getCapabilities().OpenGL44 || (GL.getCapabilities().GL_ARB_shader_storage_buffer_object && GL.getCapabilities().GL_ARB_buffer_storage);
+		return true;
 	}
 
 	public static boolean supportsImageLoadStore() {
-		return GL.getCapabilities().glBindImageTexture != 0L || GL.getCapabilities().OpenGL42 || ((GL.getCapabilities().GL_ARB_shader_image_load_store || GL.getCapabilities().GL_EXT_shader_image_load_store) && GL.getCapabilities().GL_ARB_buffer_storage);
-	}
-
-	public static void genBuffers(int[] buffers) {
-		GL43C.glGenBuffers(buffers);
-	}
-
-	public static void clearBufferSubData(int glShaderStorageBuffer, int glR8, long offset, long size, int glRed, int glByte, int[] ints) {
-		GL43C.glClearBufferSubData(glShaderStorageBuffer, glR8, offset, size, glRed, glByte, ints);
-	}
-
-	public static void getProgramiv(int program, int value, int[] storage) {
-		GL32C.glGetProgramiv(program, value, storage);
-	}
-
-	public static void dispatchCompute(int workX, int workY, int workZ) {
-		GL45C.glDispatchCompute(workX, workY, workZ);
-	}
-
-	public static void dispatchCompute(Vector3i workGroups) {
-		GL45C.glDispatchCompute(workGroups.x, workGroups.y, workGroups.z);
-	}
-
-	public static void memoryBarrier(int barriers) {
-		RenderSystem.assertOnRenderThread();
-
-		if (supportsCompute) {
-			GL45C.glMemoryBarrier(barriers);
-		}
+		return true;
 	}
 
 	public static boolean supportsBufferBlending() {
-		return GL.getCapabilities().GL_ARB_draw_buffers_blend || GL.getCapabilities().OpenGL40;
+		return true; // per-draw-buffer blend overrides are part of the Metal pipeline (BlendModeStorage)
 	}
 
-	public static void disableBufferBlend(int buffer) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glDisablei(GL32C.GL_BLEND, buffer);
-		((BooleanStateExtended) GlStateManagerAccessor.getBLEND()[0].mode).setUnknownState();
+	public static boolean supportsCompute() {
+		return true;
 	}
 
-	public static void enableBufferBlend(int buffer) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glEnablei(GL32C.GL_BLEND, buffer);
-		((BooleanStateExtended) GlStateManagerAccessor.getBLEND()[0].mode).setUnknownState();
+	public static boolean supportsTesselation() {
+		return true; // compute pre-pass + Metal tessellator (MetalTessellation)
 	}
 
-	public static void blendFuncSeparatei(int buffer, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
-		RenderSystem.assertOnRenderThread();
-		ARBDrawBuffersBlend.glBlendFuncSeparateiARB(buffer, srcRGB, dstRGB, srcAlpha, dstAlpha);
+	public static int getMaxImageUnits() {
+		return GraftShadersState.imageUnits.length;
 	}
 
-	// These functions are deprecated and unavailable in the core profile.
+	public static long getVRAM() {
+		return ObjC.send(MetalGpuDevice.current().metal().device, ObjC.sel("recommendedMaxWorkingSetSize"));
+	}
+
+	public static void getIntegerv(int pname, int[] params) {
+		throw unported("glGetIntegerv(0x" + Integer.toHexString(pname) + ")");
+	}
+
+	public static void getFloatv(int pname, float[] params) {
+		throw unported("glGetFloatv(0x" + Integer.toHexString(pname) + ")");
+	}
+
+	public static String getStringi(int glEnum, int index) {
+		throw unported("glGetStringi");
+	}
+
+	// ---- textures -----------------------------------------------------------------------------------------------------
+
+	public static int createTexture(int target) {
+		return MetalTextureIds.allocate();
+	}
+
+	public static void bindTextureForSetup(int glType, int glId) {
+		boundTexture = glId;
+	}
+
+	public static void restoreTexture() {
+	}
+
+	private static void defineTexture(int texture, int level, int internalformat, int width, int height, @Nullable ByteBuffer pixels, int format) {
+		MetalTextureIds.Entry entry = MetalTextureIds.entry(texture);
+		if (entry == null) {
+			throw new IllegalStateException("Graft Shaders: unknown texture id " + texture);
+		}
+		GpuFormat gpuFormat = MetalFormats.fromGl(internalformat);
+		if (level == 0) {
+			if (entry.texture != null && entry.owned) {
+				entry.texture.close();
+			}
+			entry.owned = true;
+			// Metal needs the mip count up front (GL grows mips on demand), so color targets get a full chain.
+			entry.texture = RenderSystem.getDevice().createTexture(
+				"Iris texture " + texture,
+				GpuTexture.USAGE_COPY_DST | GpuTexture.USAGE_COPY_SRC | GpuTexture.USAGE_TEXTURE_BINDING | GpuTexture.USAGE_RENDER_ATTACHMENT,
+				gpuFormat, Math.max(1, width), Math.max(1, height), 1, gpuFormat.hasColorAspect() ? MetalFormats.mipCount(width, height) : 1
+			);
+			if (pixels == null && gpuFormat.hasColorAspect()) {
+				// GL drivers zero new storage and packs rely on it; Metal leaves it undefined (NaN for float formats).
+				encoder().clearColorTexture(entry.texture, new org.joml.Vector4f(0.0F, 0.0F, 0.0F, 0.0F));
+			}
+		}
+		if (pixels != null) {
+			ByteBuffer expanded = rgbToRgba(pixels, format, gpuFormat, (long)width * height);
+			encoder().writeToTexture(entry.texture, expanded != null ? expanded : pixels, level, 0, 0, 0, width, height);
+			if (expanded != null) {
+				MemoryUtil.memFree(expanded);
+			}
+		}
+	}
+
+	/**
+	 * GL_RGB data for a texture stored as RGBA (Metal has no 3-channel formats): a new buffer with alpha = 1 in the
+	 * format's encoding, or null when no expansion is needed. Photon's atmosphere table is RGB16F half floats; uploading
+	 * it unexpanded misaligned every texel and the whole sky came out black.
+	 */
+	public static @Nullable ByteBuffer rgbToRgba(ByteBuffer pixels, int format, GpuFormat gpuFormat, long texels) {
+		int texel = gpuFormat.blockSize();
+		if (format != 0x1907 || !gpuFormat.name().startsWith("RGBA") || texel % 4 != 0) { // GL_RGB
+			return null;
+		}
+		int comp = texel / 4;
+		boolean isFloat = gpuFormat.name().endsWith("FLOAT");
+		long one = comp == 1 ? 0xFFL : comp == 2 ? (isFloat ? 0x3C00L : 0xFFFFL) : (isFloat ? 0x3F800000L : 0xFFFFFFFFL);
+		ByteBuffer out = MemoryUtil.memAlloc((int)(texels * texel));
+		long src = MemoryUtil.memAddress(pixels);
+		long dst = MemoryUtil.memAddress(out);
+		long available = pixels.remaining() / (3L * comp);
+		for (long i = 0; i < Math.min(texels, available); i++) {
+			MemoryUtil.memCopy(src + i * 3 * comp, dst + i * texel, 3L * comp);
+			for (int b = 0; b < comp; b++) {
+				MemoryUtil.memPutByte(dst + i * texel + 3L * comp + b, (byte)(one >>> (8 * b)));
+			}
+		}
+		return out;
+	}
+
+	public static void texImage1D(int texture, int target, int level, int internalformat, int width, int border, int format, int type, @Nullable ByteBuffer pixels) {
+		defineTexture(texture, level, internalformat, width, 1, pixels, format);
+	}
+
+	public static void texImage2D(int texture, int target, int level, int internalformat, int width, int height, int border, int format, int type, @Nullable ByteBuffer pixels) {
+		defineTexture(texture, level, internalformat, width, height, pixels, format);
+	}
+
+	/** 3D textures (pack custom textures) are raw Metal 3D textures; Minecraft's GpuTexture has no 3D type. */
+	public static void texImage3D(int texture, int target, int level, int internalformat, int width, int height, int depth, int border, int format, int type, @Nullable ByteBuffer pixels) {
+		MetalTextureIds.Entry entry = MetalTextureIds.entry(texture);
+		if (entry == null) {
+			throw new IllegalStateException("Graft Shaders: unknown texture id " + texture);
+		}
+		if (level != 0) {
+			throw unported("3D texture mip levels");
+		}
+		GpuFormat gpuFormat = MetalFormats.fromGl(internalformat);
+		var metal = MetalGpuDevice.current().metal();
+		if (entry.raw != 0L) {
+			ObjC.release(entry.raw);
+		}
+		entry.owned = true;
+		entry.raw = metal.newTexture3D(dev.graft.metal.Mtl.pixelFormat(gpuFormat.name()), width, height, depth);
+		int texel = gpuFormat.blockSize();
+		entry.rawTexel = texel;
+		entry.rawKind = gpuFormat.name().endsWith("_UINT") ? 'u' : gpuFormat.name().endsWith("_SINT") ? 'i' : 'f';
+		if (pixels == null) {
+			// GL drivers hand out zeroed storage and packs rely on it (e.g. images accumulated across frames with clear
+			// off); Metal leaves new textures undefined, which can be NaN for float formats.
+			MetalGpuDevice.current().commands().clearTexture3D(entry.raw, width, height, depth, entry.rawKind);
+			return;
+		}
+		long size = (long)width * height * depth * texel;
+		var commands = MetalGpuDevice.current().commands();
+		var scratch = commands.scratch(size);
+		ByteBuffer expanded = rgbToRgba(pixels, format, gpuFormat, (long)width * height * depth);
+		ByteBuffer source = expanded != null ? expanded : pixels;
+		MemoryUtil.memCopy(MemoryUtil.memAddress(source), scratch.address(), Math.min(size, source.remaining()));
+		if (expanded != null) {
+			MemoryUtil.memFree(expanded);
+		}
+		commands.copyBufferToTexture3D(scratch.buffer(), scratch.offset(), (long)width * texel, width, height, depth, entry.raw);
+	}
+
+	public static void texParameteri(int texture, int target, int pname, int param) {
+		MetalTextureIds.Entry e = MetalTextureIds.entry(texture);
+		if (e == null) {
+			return;
+		}
+		switch (pname) {
+			case 0x2801 -> { // MIN_FILTER
+				e.mipmapped = param >= 0x2700 && param <= 0x2703;
+				e.linear = param == 0x2601 || param == 0x2701 || param == 0x2703;
+			}
+			case 0x2800 -> e.linear = param == 0x2601; // MAG_FILTER
+			case 0x2802, 0x2803 -> e.clamp = param == 0x812F; // WRAP_S/T: CLAMP_TO_EDGE
+			case 0x884C -> { // TEXTURE_COMPARE_MODE
+				e.setCompare(param == 0x884E, -1);
+			}
+			case 0x884D -> e.setCompare(null, param); // TEXTURE_COMPARE_FUNC
+			default -> {
+			}
+		}
+	}
+
+	public static void texParameterf(int texture, int target, int pname, float param) {
+	}
+
+	public static void texParameteriv(int texture, int target, int pname, int[] params) {
+	}
+
+	public static void texParameterivDirect(int target, int pname, int[] params) {
+	}
+
+	public static int getTexParameteri(int texture, int target, int pname) {
+		return 0;
+	}
+
+	public static void generateMipmaps(int texture, int mipmapTarget) {
+		GpuTexture t = MetalTextureIds.get(texture);
+		if (t instanceof MetalTexture metal && t.getMipLevels() > 1) {
+			MetalGpuDevice.current().commands().generateMipmaps(metal.mtl());
+		}
+	}
 
 	public static void bindTextureToUnit(int target, int unit, int texture) {
-		dsaState.bindTextureToUnit(target, unit, texture);
+		GraftShadersState.debugUnbind(unit, texture);
+		GraftShadersState.unitTextures[unit] = texture;
+	}
+
+	public static void bindTextures(int startingTexture, int[] bindings) {
+		for (int i = 0; i < bindings.length; i++) {
+			GraftShadersState.unitTextures[startingTexture + i] = bindings[i];
+		}
+	}
+
+	private static GpuTexture readSource() {
+		MetalFramebuffers.Framebuffer fb = MetalFramebuffers.get(GraftShadersState.framebuffer);
+		if (fb == null) {
+			throw new IllegalStateException("Graft Shaders: copy with no framebuffer bound");
+		}
+		return MetalTextureIds.get(fb.colors[fb.readBuffer]);
+	}
+
+	public static void copyTexSubImage2D(int destTexture, int target, int level, int xoffset, int yoffset, int x, int y, int width, int height) {
+		encoder().copyTextureToTexture(readSource(), MetalTextureIds.get(destTexture), level, xoffset, yoffset, x, y, width, height);
+	}
+
+	/** GL: (re)defines the texture on the active unit from the read framebuffer; depth formats read the depth attachment. */
+	public static void copyTexImage2D(int target, int level, int internalFormat, int x, int y, int width, int height, int border) {
+		int texture = GraftShadersState.unitTextures[GraftShadersState.activeUnit];
+		MetalTextureIds.Entry entry = MetalTextureIds.entry(texture);
+		if (entry == null) {
+			throw new IllegalStateException("Graft Shaders: copyTexImage2D with no texture bound");
+		}
+		boolean depth = !MetalFormats.fromGl(internalFormat).hasColorAspect();
+		GpuTexture existing = entry.texture;
+		boolean fits = existing != null && existing.getWidth(level) == width && existing.getHeight(level) == height
+			&& existing.getFormat().hasColorAspect() != depth;
+		if (!fits) {
+			if (!entry.owned && existing != null) {
+				throw new IllegalStateException("Graft Shaders: copyTexImage2D would resize a Minecraft-owned texture");
+			}
+			defineTexture(texture, level, internalFormat, width, height, null, 0);
+		}
+		MetalFramebuffers.Framebuffer fb = MetalFramebuffers.get(GraftShadersState.framebuffer);
+		GpuTexture source = depth ? MetalTextureIds.get(fb.depth) : MetalTextureIds.get(fb.colors[fb.readBuffer]);
+		encoder().copyTextureToTexture(source, entry.texture, level, 0, 0, x, y, width, height);
+	}
+
+	public static void copyImageSubData(int sourceTexture, int target, int mip, int srcX, int srcY, int srcZ, int destTexture, int dstTarget, int dstMip, int dstX, int dstY, int dstZ, int width, int height, int depth) {
+		encoder().copyTextureToTexture(MetalTextureIds.get(sourceTexture), MetalTextureIds.get(destTexture), mip, dstX, dstY, srcX, srcY, width, height);
+	}
+
+	public static void onProgramUse() {
+	}
+
+	public static void addUnswizzle(int shaderTexture) {
+	}
+
+	// ---- samplers -----------------------------------------------------------------------------------------------------
+
+	public static int genSampler() {
+		throw unported("raw sampler objects (use GlSampler)");
+	}
+
+	public static void destroySampler(int id) {
+		MetalSamplers.destroy(id);
+	}
+
+	public static void bindSamplerToUnit(int unit, int sampler) {
+		GraftShadersState.unitSamplers[unit] = sampler;
+	}
+
+	public static void unbindAllSamplers() {
+		Arrays.fill(GraftShadersState.unitSamplers, 0);
+	}
+
+	public static void samplerParameteri(int sampler, int pname, int param) {
+	}
+
+	public static void samplerParameterf(int sampler, int pname, float param) {
+	}
+
+	public static void samplerParameteriv(int sampler, int pname, int[] params) {
+	}
+
+	// ---- framebuffers -------------------------------------------------------------------------------------------------
+
+	public static int createFramebuffer() {
+		return MetalFramebuffers.create();
+	}
+
+	public static void framebufferTexture2D(int fb, int fbtarget, int attachment, int target, int texture, int levels) {
+		MetalFramebuffers.attach(fb, attachment, texture);
+	}
+
+	public static void drawBuffers(int framebuffer, int[] buffers) {
+		MetalFramebuffers.drawBuffers(framebuffer, buffers);
+	}
+
+	public static void readBuffer(int framebuffer, int buffer) {
+		MetalFramebuffers.Framebuffer fb = MetalFramebuffers.get(framebuffer);
+		if (fb != null && buffer != 0) {
+			fb.readBuffer = buffer - 0x8CE0;
+		}
+	}
+
+	public static int checkFramebufferStatus(int glFramebuffer) {
+		return 0x8CD5; // GL_FRAMEBUFFER_COMPLETE
+	}
+
+	public static void clearColor(float r, float g, float b, float a) {
+		GraftShadersState.clearColor[0] = r;
+		GraftShadersState.clearColor[1] = g;
+		GraftShadersState.clearColor[2] = b;
+		GraftShadersState.clearColor[3] = a;
+	}
+
+	/** Clears every draw-buffer attachment (and depth when requested) of a framebuffer. */
+	/**
+	 * GL framebuffer/image clears touch the attached level only (level 0). Blaze3D's clearColorTexture clears every
+	 * mip level, one Metal encoder each; Iris color buffers have full mip chains, so per-frame clears cost ~12x.
+	 */
+	private static void clearLevel0(GpuTexture texture, Vector4f c) {
+		// Deferred: becomes the load action of the next pass rendering into it (no separate full-texture write).
+		MetalGpuDevice.current().commands().deferClear(((dev.graft.v26_2.MetalTexture)texture).mtl(), new float[]{c.x(), c.y(), c.z(), c.w()});
+	}
+
+	public static void clearFramebuffer(int framebuffer, boolean color, boolean depth, Vector4f clearColor) {
+		MetalFramebuffers.Framebuffer fb = MetalFramebuffers.get(framebuffer);
+		if (fb == null) {
+			return;
+		}
+		if (color) {
+			for (int index : fb.drawBuffers) {
+				GpuTexture t = index >= 0 ? MetalTextureIds.get(fb.colors[index]) : null;
+				if (t != null) {
+					clearLevel0(t, clearColor);
+				}
+			}
+		}
+		GpuTexture d = depth ? MetalTextureIds.get(fb.depth) : null;
+		if (d != null) {
+			encoder().clearDepthTexture(d, 1.0);
+		}
+	}
+
+	public static void clearBufferfv(int framebuffer, int buffer, int drawbuffer, float[] values) {
+		MetalFramebuffers.Framebuffer fb = MetalFramebuffers.get(framebuffer);
+		if (fb == null) {
+			return;
+		}
+		if (buffer == 0x1801) { // GL_DEPTH
+			GpuTexture d = MetalTextureIds.get(fb.depth);
+			if (d != null) {
+				encoder().clearDepthTexture(d, values[0]);
+			}
+			return;
+		}
+		int index = fb.drawBuffers[drawbuffer];
+		GpuTexture t = index >= 0 ? MetalTextureIds.get(fb.colors[index]) : null;
+		if (t != null) {
+			clearLevel0(t, new Vector4f(values[0], values[1], values[2], values[3]));
+		}
+	}
+
+	public static void clearBufferiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
+		clearBufferfv(framebuffer, buffer, drawbuffer, new float[]{values[0], values[1], values[2], values[3]});
+	}
+
+	public static void clearBufferuiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
+		clearBufferiv(framebuffer, buffer, drawbuffer, values);
+	}
+
+	public static void blitFramebuffer(int source, int dest, int offsetX, int offsetY, int width, int height, int offsetX2, int offsetY2, int width2, int height2, int bufferChoice, int filter) {
+		MetalFramebuffers.Framebuffer src = MetalFramebuffers.get(source);
+		MetalFramebuffers.Framebuffer dst = MetalFramebuffers.get(dest);
+		if (src == null || dst == null || width - offsetX != width2 - offsetX2 || height - offsetY != height2 - offsetY2) {
+			throw unported("scaled framebuffer blits");
+		}
+		boolean depth = (bufferChoice & 0x100) != 0; // GL_DEPTH_BUFFER_BIT
+		GpuTexture from = MetalTextureIds.get(depth ? src.depth : src.colors[src.readBuffer]);
+		GpuTexture to = MetalTextureIds.get(depth ? dst.depth : dst.colors[Math.max(0, dst.drawBuffers[0])]);
+		encoder().copyTextureToTexture(from, to, 0, offsetX2, offsetY2, offsetX, offsetY, width - offsetX, height - offsetY);
+	}
+
+	public static void readPixels(int x, int y, int width, int height, int format, int type, float[] pixels) {
+		throw unported("glReadPixels");
+	}
+
+	// ---- programs & uniforms ------------------------------------------------------------------------------------------
+
+	private static MetalProgram program() {
+		return GraftShadersState.program;
+	}
+
+	public static void uniform1f(int location, float v0) {
+		if (program() != null) program().setFloats(location, 1, v0, 0, 0, 0);
+	}
+
+	public static void uniform2f(int location, float v0, float v1) {
+		if (program() != null) program().setFloats(location, 2, v0, v1, 0, 0);
+	}
+
+	public static void uniform3f(int location, float v0, float v1, float v2) {
+		if (program() != null) program().setFloats(location, 3, v0, v1, v2, 0);
+	}
+
+	public static void uniform4f(int location, float v0, float v1, float v2, float v3) {
+		if (program() != null) program().setFloats(location, 4, v0, v1, v2, v3);
+	}
+
+	public static void uniform1i(int location, int v0) {
+		if (program() != null) program().setInts(location, 1, v0, 0, 0, 0);
+	}
+
+	public static void uniform2i(int location, int v0, int v1) {
+		if (program() != null) program().setInts(location, 2, v0, v1, 0, 0);
+	}
+
+	public static void uniform3i(int location, int v0, int v1, int v2) {
+		if (program() != null) program().setInts(location, 3, v0, v1, v2, 0);
+	}
+
+	public static void uniform4i(int location, int v0, int v1, int v2, int v3) {
+		if (program() != null) program().setInts(location, 4, v0, v1, v2, v3);
+	}
+
+	public static void uniformMatrix4fv(int location, boolean transpose, FloatBuffer matrix) {
+		if (program() != null) program().setMatrix(location, 4, transpose, matrix);
+	}
+
+	public static void uniformMatrix4fv(int location, boolean transpose, float[] matrix) {
+		uniformMatrix4fv(location, transpose, FloatBuffer.wrap(matrix));
+	}
+
+	public static void uniformMatrix3fv(int location, boolean transpose, FloatBuffer matrix) {
+		if (program() != null) program().setMatrix(location, 3, transpose, matrix);
+	}
+
+	public static void uniformMatrix3fv(int location, boolean transpose, float[] matrix) {
+		uniformMatrix3fv(location, transpose, FloatBuffer.wrap(matrix));
+	}
+
+	public static void bindAttributeLocation(int program, int index, CharSequence name) {
+		// Attribute locations are fixed when the program is linked for Metal.
+	}
+
+	public static int getAttribLocation(int program, String name) {
+		MetalProgram p = MetalProgram.get(program);
+		return p != null ? p.linked.attributeLocations().getOrDefault(name, -1) : -1;
+	}
+
+	public static void detachShader(int program, int shader) {
+	}
+
+	public static String getProgramInfoLog(int program) {
+		return "";
+	}
+
+	public static String getShaderInfoLog(int shader) {
+		return "";
+	}
+
+	public static String getActiveUniform(int program, int index, int size, IntBuffer type, IntBuffer name) {
+		throw unported("glGetActiveUniform (use MetalProgram.activeUniformNames)");
+	}
+
+	public static void getProgramiv(int program, int value, int[] storage) {
+		throw unported("glGetProgramiv");
 	}
 
 	public static int getUniformBlockIndex(int program, String uniformBlockName) {
-		RenderSystem.assertOnRenderThread();
-		return GL32C.glGetUniformBlockIndex(program, uniformBlockName);
+		return -1;
 	}
 
 	public static void uniformBlockBinding(int program, int uniformBlockIndex, int uniformBlockBinding) {
-		RenderSystem.assertOnRenderThread();
-		GL32C.glUniformBlockBinding(program, uniformBlockIndex, uniformBlockBinding);
 	}
+
+	public static void vertexAttrib4f(int index, float v0, float v1, float v2, float v3) {
+		// Constant vertex attributes: not needed for composite/final passes.
+	}
+
+	// ---- not ported yet (compute, storage buffers, images, per-buffer blending) --------------------------------------
+
+	public static void memoryBarrier(int barriers) {
+		// Metal tracks render/blit hazards itself; compute barriers arrive with compute support.
+	}
+
+	public static void dispatchCompute(int workX, int workY, int workZ) {
+		net.irisshaders.iris.metal.GraftShadersCompute.dispatch(workX, workY, workZ);
+	}
+
+	public static void dispatchCompute(Vector3i workGroups) {
+		dispatchCompute(workGroups.x, workGroups.y, workGroups.z);
+	}
+
+	public static void dispatchComputeIndirect(long offset) {
+		net.irisshaders.iris.metal.GraftShadersCompute.dispatchIndirect(offset);
+	}
+
+	/** ponytail: binds mip level 0 of the texture; Iris images are single-level. Add per-level views if a pack needs it. */
+	public static void bindImageTexture(int unit, int texture, int level, boolean layered, int layer, int access, int format) {
+		if (unit < GraftShadersState.imageUnits.length) {
+			GraftShadersState.imageUnits[unit] = texture;
+		}
+	}
+
+	/** Zero-fills a texture (glClearTexImage with no data). */
+	public static void clearTexture(int texture) {
+		MetalTextureIds.Entry e = MetalTextureIds.entry(texture);
+		if (e == null) {
+			return;
+		}
+		if (e.texture != null) {
+			clearLevel0(e.texture, new Vector4f(0, 0, 0, 0));
+		} else if (e.raw != 0L) {
+			long w = ObjC.send(e.raw, ObjC.sel("width"));
+			long h = ObjC.send(e.raw, ObjC.sel("height"));
+			long d = ObjC.send(e.raw, ObjC.sel("depth"));
+			// Write-only compute clear: packs clear large voxel volumes every frame.
+			MetalGpuDevice.current().commands().clearTexture3D(e.raw, (int)w, (int)h, (int)d, e.rawKind);
+		}
+	}
+
+	public static void bufferData(int target, float[] data, int usage) {
+		throw unported("GL buffers");
+	}
+
+	public static int bufferStorage(int target, float[] data, int usage) {
+		throw unported("GL buffers");
+	}
+
+	public static void bufferStorage(int target, long size, int flags) {
+		throw unported("GL buffers");
+	}
+
+	public static void bindBufferBase(int target, Integer index, int buffer) {
+		if (target == 0x90D2 && index != null && index < GraftShadersState.storageBuffers.length) { // GL_SHADER_STORAGE_BUFFER
+			GraftShadersState.storageBuffers[index] = buffer;
+		}
+	}
+
+	public static void genBuffers(int[] buffers) {
+		throw unported("GL buffers");
+	}
+
+	public static int createBuffers() {
+		throw unported("GL buffers");
+	}
+
+	public static void bindBuffer(int target, int buffer) {
+		if (target == 0x90EE) { // GL_DISPATCH_INDIRECT_BUFFER
+			GraftShadersState.dispatchIndirectBuffer = buffer;
+		}
+	}
+
+	public static void deleteBuffers(int id) {
+	}
+
+	public static void clearBufferSubData(int glShaderStorageBuffer, int glR8, long offset, long size, int glRed, int glByte, int[] ints) {
+		throw unported("shader storage buffers");
+	}
+
+	public static void disableBufferBlend(int buffer) {
+	}
+
+	public static void enableBufferBlend(int buffer) {
+	}
+
+	public static void blendFuncSeparatei(int buffer, int srcRGB, int dstRGB, int srcAlpha, int dstAlpha) {
+	}
+
+	// ---- unchanged game-side state ------------------------------------------------------------------------------------
 
 	public static void setShadowProjection(Matrix4f shadowProjection) {
 		backupProjection = RenderSystem.getProjectionMatrixBuffer();
@@ -380,139 +635,19 @@ public class IrisRenderSystem {
 		backupProjectionType = null;
 	}
 
-	public static void blitFramebuffer(int source, int dest, int offsetX, int offsetY, int width, int height, int offsetX2, int offsetY2, int width2, int height2, int bufferChoice, int filter) {
-		dsaState.blitFramebuffer(source, dest, offsetX, offsetY, width, height, offsetX2, offsetY2, width2, height2, bufferChoice, filter);
-	}
-
-	public static int createFramebuffer() {
-		return dsaState.createFramebuffer();
-	}
-
-	public static int createTexture(int target) {
-		return dsaState.createTexture(target);
-	}
-
-	private static int lastTex = -1;
-
-	public static void bindTextureForSetup(int glType, int glId) {
-		if (glType == GL46C.GL_TEXTURE_2D) {
-			lastTex = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
-		}
-		GL30C.glBindTexture(glType, glId);
-	}
-
-	public static void restoreTexture() {
-		if (lastTex != -1) {
-			GL30C.glBindTexture(GL46C.GL_TEXTURE_2D, lastTex);
-			lastTex = -1;
-		}
-	}
-
-	public static boolean supportsCompute() {
-		return supportsCompute;
-	}
-
-	public static boolean supportsTesselation() {
-		return supportsTesselation;
-	}
-
-	public static int genSampler() {
-		return GL33C.glGenSamplers();
-	}
-
-	public static void destroySampler(int glId) {
-		GL33C.glDeleteSamplers(glId);
-	}
-
-	public static void bindSamplerToUnit(int unit, int sampler) {
-		if (samplers[unit] == sampler) {
-			return;
-		}
-
-		GL33C.glBindSampler(unit, sampler);
-
-		samplers[unit] = sampler;
-	}
-
-	public static void unbindAllSamplers() {
-		boolean usedASampler = false;
-		for (int i = 0; i < samplers.length; i++) {
-			if (samplers[i] != 0) {
-				usedASampler = true;
-				if (!hasMultibind) GL33C.glBindSampler(i, 0);
-				samplers[i] = 0;
-			}
-		}
-		if (usedASampler && hasMultibind) {
-			GL45C.glBindSamplers(0, emptyArray);
-		}
-	}
-
-
-	public static void samplerParameteri(int sampler, int pname, int param) {
-		GL33C.glSamplerParameteri(sampler, pname, param);
-	}
-
-	public static void samplerParameterf(int sampler, int pname, float param) {
-		GL33C.glSamplerParameterf(sampler, pname, param);
-	}
-
-	public static void samplerParameteriv(int sampler, int pname, int[] params) {
-		GL33C.glSamplerParameteriv(sampler, pname, params);
-	}
-
-	public static long getVRAM() {
-		if (GL.getCapabilities().GL_NVX_gpu_memory_info) {
-			return GL32C.glGetInteger(NVXGPUMemoryInfo.GL_GPU_MEMORY_INFO_CURRENT_AVAILABLE_VIDMEM_NVX) * 1024L;
-		} else {
-			return 4294967296L;
-		}
-	}
-
-	public static void deleteBuffers(int glId) {
-		RenderSystem.assertOnRenderThread();
-		GL43C.glDeleteBuffers(glId);
-	}
-
 	public static void setPolygonMode(int mode) {
-		if (mode != polygonMode) {
-			polygonMode = mode;
-			GL43C.glPolygonMode(GL43C.GL_FRONT_AND_BACK, mode);
-		}
+		polygonMode = mode;
 	}
 
 	public static void overridePolygonMode() {
 		backupPolygonMode = polygonMode;
-		setPolygonMode(GL43C.GL_FILL);
+		setPolygonMode(0x1B02);
 	}
 
 	public static void restorePolygonMode() {
 		setPolygonMode(backupPolygonMode);
-		backupPolygonMode = GL43C.GL_FILL;
+		backupPolygonMode = 0x1B02;
 	}
-
-	public static void dispatchComputeIndirect(long offset) {
-		GL43C.glDispatchComputeIndirect(offset);
-	}
-
-	public static void bindBuffer(int target, int buffer) {
-		GL46C.glBindBuffer(target, buffer);
-	}
-
-	public static int createBuffers() {
-		return dsaState.createBuffers();
-	}
-
-	public static String getStringi(int glEnum, int index) {
-		return GL46C.glGetStringi(glEnum, index);
-	}
-
-	public static void copyImageSubData(int sourceTexture, int target, int mip, int srcX, int srcY, int srcZ, int destTexture, int dstTarget, int dstMip, int dstX, int dstY, int dstZ, int width, int height, int depth) {
-		GL46C.glCopyImageSubData(sourceTexture, target, mip, srcX, srcY, srcZ, destTexture, dstTarget, dstMip, dstX, dstY, dstZ, width, height, depth);
-  }
-
-
-  private static boolean cullingState;
 
 	public static void backupAndDisableCullingState(boolean b) {
 		cullingState = Minecraft.getInstance().smartCull;
@@ -522,341 +657,5 @@ public class IrisRenderSystem {
 	public static void restoreCullingState() {
 		Minecraft.getInstance().smartCull = cullingState;
 		cullingState = true;
-  }
-
-	public static void onProgramUse() {
-		for (int i = 0; i < textureToUnswizzle.size(); i++) {
-			texParameteriv(textureToUnswizzle.getInt(i), TextureType.TEXTURE_2D.getGlType(), ARBTextureSwizzle.GL_TEXTURE_SWIZZLE_RGBA,
-				new int[]{GL30C.GL_RED, GL30C.GL_GREEN, GL30C.GL_BLUE, GL30C.GL_ALPHA});
-		}
-		textureToUnswizzle.clear();
 	}
-
-	public static void addUnswizzle(int shaderTexture) {
-		textureToUnswizzle.add(shaderTexture);
-	}
-
-	public static int checkFramebufferStatus(int glFramebuffer) {
-		return GL46C.glCheckFramebufferStatus(glFramebuffer);
-	}
-
-	public static void uniformMatrix3fv(int index, boolean b, FloatBuffer buf) {
-		RenderSystem.assertOnRenderThread();
-		GL46C.glUniformMatrix3fv(index, b, buf);
-	}
-
-	public static void uniformMatrix3fv(int index, boolean b, float[] buf) {
-		RenderSystem.assertOnRenderThread();
-		GL46C.glUniformMatrix3fv(index, b, buf);
-	}
-
-	public static void clearColor(float v, float v1, float v2, float v3) {
-		RenderSystem.assertOnRenderThread();
-		GL46C.glClearColor(v, v1, v2, v3);
-	}
-
-	public static int getAttribLocation(int handle, String irisNormal) {
-		return GL46C.glGetAttribLocation(handle, irisNormal);
-	}
-
-	public static GlDevice getGlDevice() {
-		return (GlDevice) ((GpuDeviceAccessor) RenderSystem.getDevice()).getBackend();
-	}
-
-    public interface DSAAccess {
-		void generateMipmaps(int texture, int target);
-
-		void texParameteri(int texture, int target, int pname, int param);
-
-		void texParameterf(int texture, int target, int pname, float param);
-
-		void texParameteriv(int texture, int target, int pname, int[] params);
-
-		void readBuffer(int framebuffer, int buffer);
-
-		void drawBuffers(int framebuffer, int[] buffers);
-
-		void clearBufferfv(int framebuffer, int buffer, int drawbuffer, float[] values);
-
-		void clearBufferiv(int framebuffer, int buffer, int drawbuffer, int[] values);
-
-		void clearBufferuiv(int framebuffer, int buffer, int drawbuffer, int[] values);
-
-		int getTexParameteri(int texture, int target, int pname);
-
-		void copyTexSubImage2D(int destTexture, int target, int i, int i1, int i2, int i3, int i4, int width, int height);
-
-		void bindTextureToUnit(int target, int unit, int texture);
-
-		int bufferStorage(int target, float[] data, int usage);
-
-		void blitFramebuffer(int source, int dest, int offsetX, int offsetY, int width, int height, int offsetX2, int offsetY2, int width2, int height2, int bufferChoice, int filter);
-
-		void framebufferTexture2D(int fb, int fbtarget, int attachment, int target, int texture, int levels);
-
-		int createFramebuffer();
-
-		int createTexture(int target);
-
-		int createBuffers();
-	}
-
-	public static class DSACore extends DSAARB {
-
-	}
-
-	public static class DSAARB extends DSAUnsupported {
-
-		@Override
-		public void generateMipmaps(int texture, int target) {
-			ARBDirectStateAccess.glGenerateTextureMipmap(texture);
-		}
-
-		@Override
-		public void texParameteri(int texture, int target, int pname, int param) {
-			ARBDirectStateAccess.glTextureParameteri(texture, pname, param);
-		}
-
-		@Override
-		public void texParameterf(int texture, int target, int pname, float param) {
-			ARBDirectStateAccess.glTextureParameterf(texture, pname, param);
-		}
-
-		@Override
-		public void texParameteriv(int texture, int target, int pname, int[] params) {
-			ARBDirectStateAccess.glTextureParameteriv(texture, pname, params);
-		}
-
-
-		@Override
-		public void readBuffer(int framebuffer, int buffer) {
-			ARBDirectStateAccess.glNamedFramebufferReadBuffer(framebuffer, buffer);
-		}
-
-		@Override
-		public void drawBuffers(int framebuffer, int[] buffers) {
-			ARBDirectStateAccess.glNamedFramebufferDrawBuffers(framebuffer, buffers);
-		}
-
-		@Override
-		public void clearBufferfv(int framebuffer, int buffer, int drawbuffer, float[] values) {
-			ARBDirectStateAccess.glClearNamedFramebufferfv(framebuffer, buffer, drawbuffer, values);
-		}
-
-		@Override
-		public void clearBufferiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-			ARBDirectStateAccess.glClearNamedFramebufferiv(framebuffer, buffer, drawbuffer, values);
-		}
-
-		@Override
-		public void clearBufferuiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-			ARBDirectStateAccess.glClearNamedFramebufferuiv(framebuffer, buffer, drawbuffer, values);
-		}
-
-		@Override
-		public int getTexParameteri(int texture, int target, int pname) {
-			return ARBDirectStateAccess.glGetTextureParameteri(texture, pname);
-		}
-
-		@Override
-		public void copyTexSubImage2D(int destTexture, int target, int i, int i1, int i2, int i3, int i4, int width, int height) {
-			ARBDirectStateAccess.glCopyTextureSubImage2D(destTexture, i, i1, i2, i3, i4, width, height);
-		}
-
-		@Override
-		public void bindTextureToUnit(int target, int unit, int texture) {
-			if (target == GL46C.GL_TEXTURE_2D) {
-				if (GlStateManagerAccessor.getTEXTURES()[unit].binding == texture) {
-					return;
-				}
-
-				ARBDirectStateAccess.glBindTextureUnit(unit, texture);
-
-				// Manually fix GLStateManager bindings...
-				GlStateManagerAccessor.getTEXTURES()[unit].binding = texture;
-			} else {
-				ARBDirectStateAccess.glBindTextureUnit(unit, texture);
-			}
-		}
-
-		@Override
-		public int bufferStorage(int target, float[] data, int usage) {
-			int buffer = GL45C.glCreateBuffers();
-			GL45C.glNamedBufferData(buffer, data, usage);
-			return buffer;
-		}
-
-		@Override
-		public int createBuffers() {
-			return ARBDirectStateAccess.glCreateBuffers();
-		}
-
-		@Override
-		public void blitFramebuffer(int source, int dest, int offsetX, int offsetY, int width, int height, int offsetX2, int offsetY2, int width2, int height2, int bufferChoice, int filter) {
-			ARBDirectStateAccess.glBlitNamedFramebuffer(source, dest, offsetX, offsetY, width, height, offsetX2, offsetY2, width2, height2, bufferChoice, filter);
-		}
-
-		@Override
-		public void framebufferTexture2D(int fb, int fbtarget, int attachment, int target, int texture, int levels) {
-			ARBDirectStateAccess.glNamedFramebufferTexture(fb, attachment, texture, levels);
-		}
-
-		@Override
-		public int createFramebuffer() {
-			return ARBDirectStateAccess.glCreateFramebuffers();
-		}
-
-		@Override
-		public int createTexture(int target) {
-			return ARBDirectStateAccess.glCreateTextures(target);
-		}
-	}
-
-	public static class DSAUnsupported implements DSAAccess {
-		@Override
-		public void generateMipmaps(int texture, int target) {
-			int previous = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
-			GlStateManager._bindTexture(texture);
-			GL32C.glGenerateMipmap(target);
-			GlStateManager._bindTexture(previous);
-		}
-
-		@Override
-		public void texParameteri(int texture, int target, int pname, int param) {
-			bindTextureForSetup(target, texture);
-			GL32C.glTexParameteri(target, pname, param);
-			restoreTexture();
-		}
-
-		@Override
-		public void texParameterf(int texture, int target, int pname, float param) {
-			bindTextureForSetup(target, texture);
-			GL32C.glTexParameterf(target, pname, param);
-			restoreTexture();
-		}
-
-		@Override
-		public void texParameteriv(int texture, int target, int pname, int[] params) {
-			bindTextureForSetup(target, texture);
-			GL32C.glTexParameteriv(target, pname, params);
-			restoreTexture();
-		}
-
-		@Override
-		public void readBuffer(int framebuffer, int buffer) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			GL32C.glReadBuffer(buffer);
-		}
-
-		@Override
-		public void drawBuffers(int framebuffer, int[] buffers) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			GL32C.glDrawBuffers(buffers);
-		}
-
-		@Override
-		public void clearBufferfv(int framebuffer, int buffer, int drawbuffer, float[] values) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			GL32C.glClearBufferfv(buffer, drawbuffer, values);
-		}
-
-		@Override
-		public void clearBufferiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			GL32C.glClearBufferiv(buffer, drawbuffer, values);
-		}
-
-		@Override
-		public void clearBufferuiv(int framebuffer, int buffer, int drawbuffer, int[] values) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			GL32C.glClearBufferuiv(buffer, drawbuffer, values);
-		}
-
-		@Override
-		public int getTexParameteri(int texture, int target, int pname) {
-			bindTextureForSetup(target, texture);
-			return GL32C.glGetTexParameteri(target, pname);
-		}
-
-		@Override
-		public void copyTexSubImage2D(int destTexture, int target, int i, int i1, int i2, int i3, int i4, int width, int height) {
-			int previous = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
-			GlStateManager._bindTexture(destTexture);
-			GL32C.glCopyTexSubImage2D(target, i, i1, i2, i3, i4, width, height);
-			GlStateManager._bindTexture(previous);
-		}
-
-		@Override
-		public void bindTextureToUnit(int target, int unit, int texture) {
-			int activeTexture = GlStateManagerAccessor.getActiveTexture();
-			GlStateManager._activeTexture(GL30C.GL_TEXTURE0 + unit);
-			GL46C.glBindTexture(target, texture);
-			if (target == GL46C.GL_TEXTURE_2D) {
-				GlStateManagerAccessor.getTEXTURES()[unit].binding = texture;
-			}
-			GlStateManager._activeTexture(GL30C.GL_TEXTURE0 + activeTexture);
-		}
-
-		@Override
-		public int bufferStorage(int target, float[] data, int usage) {
-			int buffer = GlStateManager._glGenBuffers();
-			GlStateManager._glBindBuffer(target, buffer);
-			bufferData(target, data, usage);
-			GlStateManager._glBindBuffer(target, 0);
-
-			return buffer;
-		}
-
-		@Override
-		public void blitFramebuffer(int source, int dest, int offsetX, int offsetY, int width, int height, int offsetX2, int offsetY2, int width2, int height2, int bufferChoice, int filter) {
-			GlStateManager._glBindFramebuffer(GL32C.GL_READ_FRAMEBUFFER, source);
-			GlStateManager._glBindFramebuffer(GL32C.GL_DRAW_FRAMEBUFFER, dest);
-			GL32C.glBlitFramebuffer(offsetX, offsetY, width, height, offsetX2, offsetY2, width2, height2, bufferChoice, filter);
-		}
-
-		@Override
-		public void framebufferTexture2D(int fb, int fbtarget, int attachment, int target, int texture, int levels) {
-			GlStateManager._glBindFramebuffer(fbtarget, fb);
-			GL32C.glFramebufferTexture2D(fbtarget, attachment, target, texture, levels);
-		}
-
-		@Override
-		public int createFramebuffer() {
-			int framebuffer = GlStateManager.glGenFramebuffers();
-			GlStateManager._glBindFramebuffer(GL32C.GL_FRAMEBUFFER, framebuffer);
-			return framebuffer;
-		}
-
-		@Override
-		public int createTexture(int target) {
-			int texture = GlStateManager._genTexture();
-			bindTextureForSetup(target, texture);
-			restoreTexture();
-			return texture;
-		}
-
-		@Override
-		public int createBuffers() {
-			return GlStateManager._glGenBuffers();
-		}
-	}
-
-		/*
-	public static void bindTextures(int startingTexture, int[] bindings) {
-		if (hasMultibind) {
-			ARBMultiBind.glBindTextures(startingTexture, bindings);
-		} else if (dsaState != DSAState.NONE) {
-			for (int binding : bindings) {
-				ARBDirectStateAccess.glBindTextureUnit(startingTexture, binding);
-				startingTexture++;
-			}
-		} else {
-			for (int binding : bindings) {
-				GlStateManager._activeTexture(startingTexture);
-				GlStateManager._bindTexture(binding);
-				startingTexture++;
-			}
-		}
-	}
-	 */
 }

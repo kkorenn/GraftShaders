@@ -184,7 +184,7 @@ public class IrisLodRenderProgram {
 			matrix.get(buffer);
 			buffer.rewind();
 
-			GL46C.glUniformMatrix4fv(index, false, buffer);
+			net.irisshaders.iris.gl.IrisRenderSystem.uniformMatrix4fv(index, false, buffer);
 		}
 	}
 
@@ -259,7 +259,7 @@ public class IrisLodRenderProgram {
 	}
 
 	private void setUniform(int index, float value) {
-		GL43C.glUniform1f(index, value);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1f(index, value);
 	}
 
 	public void setModelPos(DhApiVec3f modelPos) {
@@ -267,7 +267,7 @@ public class IrisLodRenderProgram {
 	}
 
 	private void setUniform(int index, DhApiVec3f pos) {
-		GL43C.glUniform3f(index, pos.x, pos.y, pos.z);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform3f(index, pos.x, pos.y, pos.z);
 	}
 
 }

@@ -295,13 +295,13 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		);
 
 		// Don't clobber anything in texture unit 0. It probably won't cause issues, but we're just being cautious here.
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE2);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE2);
 
 		customTextureManager = new CustomTextureManager(programSet.getPackDirectives(), programSet.getPack().getCustomTextureDataMap(), programSet.getPack().getIrisCustomTextureDataMap(), programSet.getPack().getCustomNoiseTexture());
 		whitePixel = new NativeImageBackedSingleColorTexture(255, 255, 255, 255);
 		biggerWhitePixel = new NativeImageBackedSingleColorTexture(32, 32, 255, 255, 255, 255);
 
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE0);
 
 		BufferFlipper flipper = new BufferFlipper();
 
@@ -512,7 +512,7 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 				}
 
 				@Override
-				public void process(GlTexture target) {
+				public void process(com.mojang.blaze3d.textures.GpuTexture target) {
 
 				}
 			};
@@ -881,7 +881,7 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		}
 
 		// Make sure we're using texture unit 0 for this.
-		GlStateManager._activeTexture(GL15C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL15C.GL_TEXTURE0);
 		Vector4f emptyClearColor = new Vector4f(1.0F);
 
 		GLDebug.pushGroup(100, "Clear textures");
@@ -1089,7 +1089,7 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 
 	@Override
 	public void finalizeGameRendering() {
-		colorSpaceConverter.process((GlTexture) Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTexture());
+		colorSpaceConverter.process(Minecraft.getInstance().gameRenderer.mainRenderTarget().getColorTexture());
 	}
 
 	@Override
@@ -1204,15 +1204,15 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 		//
 		// Without this code, there will be weird issues when reloading certain shaderpacks.
 		for (int i = 0; i < 16; i++) {
-			GlStateManager._activeTexture(GL20C.GL_TEXTURE0 + i);
+			net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE0 + i);
 			IrisRenderSystem.unbindAllSamplers();
-			GlStateManager._bindTexture(0);
+			net.irisshaders.iris.metal.GraftShadersState.bindTexture(0);
 		}
 
 		// Set the active texture unit to unit 0
 		//
 		// This seems to be what most code expects. It's a sane default in any case.
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
+		net.irisshaders.iris.metal.GraftShadersState.activeTexture(GL20C.GL_TEXTURE0);
 
 		if (shadowCompositeRenderer != null) {
 			shadowCompositeRenderer.destroy();
@@ -1229,9 +1229,9 @@ public class IrisRenderingPipeline implements WorldRenderingPipeline, ShaderRend
 
 		horizonRenderer.destroy();
 
-		GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
-		GlStateManager._glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, 0);
-		GlStateManager._glBindFramebuffer(GL30C.GL_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, 0);
+		net.irisshaders.iris.metal.GraftShadersState.bindFramebuffer(GL30C.GL_FRAMEBUFFER, 0);
 
 		renderTargets.destroy();
 		dhCompat.clearPipeline();
