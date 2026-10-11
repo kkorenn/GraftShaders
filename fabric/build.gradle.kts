@@ -4,6 +4,9 @@ plugins {
     id("fabric-loom") version ("1.11.4")
 }
 
+// Graft checkout: next to this repo (../Graft) or, in the HoneycrispEco layout, two levels up.
+val graftDir = if (rootProject.file("../Graft/settings.gradle").exists()) "../Graft" else "../../Graft"
+
 val MINECRAFT_VERSION: String by rootProject.extra
 val PARCHMENT_VERSION: String? by rootProject.extra
 val FABRIC_LOADER_VERSION: String by rootProject.extra
@@ -27,10 +30,18 @@ repositories {
 }
 
 base {
-    archivesName.set("iris-fabric")
+    archivesName.set("graftshaders-fabric")
 }
 
 dependencies {
+    // Graft (required mod): the Metal renderer Graft Shaders draws through.
+    implementation(files(rootProject.file("$graftDir/mc1_21_8/build/devlibs/graft-1.21.8-1.0.0-dev.jar")))
+    // Graft's dev jar has no nested jars: its shaderc / SPIRV-Cross come from here in dev runs.
+    for (module in listOf("lwjgl-shaderc", "lwjgl-spvc")) {
+        implementation("org.lwjgl:$module:3.3.3")
+        runtimeOnly("org.lwjgl:$module:3.3.3:natives-macos-arm64")
+    }
+
     minecraft("com.mojang:minecraft:${MINECRAFT_VERSION}")
     mappings(loom.layered {
         officialMojangMappings()

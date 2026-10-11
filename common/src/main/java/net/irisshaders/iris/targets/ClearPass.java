@@ -26,17 +26,12 @@ public class ClearPass {
 	}
 
 	public void execute(Vector4f defaultClearColor) {
-		GlStateManager._viewport(0, 0, viewportX.getAsInt(), viewportY.getAsInt());
-		framebuffer.bind();
-
 		Vector4f color = Objects.requireNonNull(defaultClearColor);
-
 		if (this.color != null) {
 			color = this.color;
 		}
-
-		IrisRenderSystem.clearColor(color.x, color.y, color.z, color.w);
-		GlStateManager._clear(clearFlags);
+		// GL_COLOR_BUFFER_BIT = 0x4000, GL_DEPTH_BUFFER_BIT = 0x100
+		IrisRenderSystem.clearFramebuffer(framebuffer.getId(), (clearFlags & 0x4000) != 0, (clearFlags & 0x100) != 0, color);
 	}
 
 	public GlFramebuffer getFramebuffer() {

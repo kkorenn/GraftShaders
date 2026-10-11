@@ -164,7 +164,7 @@ public class SodiumShader implements ChunkShaderInterface {
 
 
 		if (isShadowPass) {
-			GlStateManager._disableCull();
+			net.irisshaders.iris.metal.GraftShadersState.ignoredState(); // MetalProgram drops culling in the shadow pass
 		}
 
 		var textureAtlas = Minecraft.getInstance()
@@ -192,17 +192,15 @@ public class SodiumShader implements ChunkShaderInterface {
 	}
 
 	private void bindTextures(GpuTextureView atlas) {
-		((GlTexture) atlas.texture()).flushModeChanges(GL46C.GL_TEXTURE_2D);
-		IrisRenderSystem.bindTextureToUnit(GL20C.GL_TEXTURE_2D, 0, atlas.texture().iris$getGlId());
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0);
-		GlStateManager._texParameter(3553, 33084, atlas.baseMipLevel());
-		GlStateManager._texParameter(3553, 33085, atlas.baseMipLevel() + atlas.mipLevels() - 1);
-		((GlTexture) atlas.texture()).flushModeChanges(GL20C.GL_TEXTURE_2D);
+		// Metal: whole atlas mip chain (no GL_TEXTURE_BASE/MAX_LEVEL); atlas and lightmap sample with their own texture state.
+		bindUnit(0, atlas);
+		bindUnit(2, Minecraft.getInstance().gameRenderer.lightTexture().getTextureView());
+	}
 
-		GpuTextureView lightmap = Minecraft.getInstance().gameRenderer.lightTexture().getTextureView();
-		((GlTexture) lightmap.texture()).flushModeChanges(GL46C.GL_TEXTURE_2D);
-		IrisRenderSystem.bindTextureToUnit(GL20C.GL_TEXTURE_2D, 2, lightmap.texture().iris$getGlId());
-		GlStateManager._activeTexture(GL20C.GL_TEXTURE0 + IrisSamplers.LIGHTMAP_TEXTURE_UNIT);
+	private static void bindUnit(int unit, GpuTextureView view) {
+		IrisRenderSystem.bindTextureToUnit(GL20C.GL_TEXTURE_2D, unit, view.texture().iris$getGlId());
+		IrisRenderSystem.bindSamplerToUnit(unit, net.irisshaders.iris.metal.MetalSamplers.wrapCached(
+			dev.graft.v1_21.MetalGpuDevice.current().sampler((dev.graft.v1_21.MetalTexture)view.texture())));
 	}
 
 	private void applyBlendModes() {

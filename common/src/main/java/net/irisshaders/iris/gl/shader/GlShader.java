@@ -27,26 +27,18 @@ public class GlShader extends GlResource {
 		this.name = name;
 	}
 
+	private static final it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<String[]> SOURCES = new it.unimi.dsi.fastutil.ints.Int2ObjectOpenHashMap<>();
+	private static int nextId = 1;
+
+	/** Metal compiles vertex+fragment together at link time; a shader object just holds its source. */
 	private static int createShader(ShaderType type, String name, String src) {
-		int handle = GlStateManager.glCreateShader(type.id);
-		ShaderWorkarounds.safeShaderSource(handle, src);
-		GlStateManager.glCompileShader(handle);
+		int id = nextId++;
+		SOURCES.put(id, new String[]{type.name(), name, src});
+		return id;
+	}
 
-		GLDebug.nameObject(KHRDebug.GL_SHADER, handle, name + "(" + type.name().toLowerCase(Locale.ROOT) + ")");
-
-		String log = IrisRenderSystem.getShaderInfoLog(handle);
-
-		if (!log.isEmpty()) {
-			LOGGER.warn("Shader compilation log for " + name + ": " + log);
-		}
-
-		int result = GlStateManager.glGetShaderi(handle, GL20C.GL_COMPILE_STATUS);
-
-		if (result != GL20C.GL_TRUE) {
-			throw new ShaderCompileException(name, log);
-		}
-
-		return handle;
+	public static String[] source(int handle) {
+		return SOURCES.get(handle);
 	}
 
 	public String getName() {
@@ -59,6 +51,6 @@ public class GlShader extends GlResource {
 
 	@Override
 	protected void destroyInternal() {
-		GlStateManager.glDeleteShader(this.getGlId());
+		SOURCES.remove(this.getGlId());
 	}
 }

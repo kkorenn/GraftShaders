@@ -291,7 +291,7 @@ public class ProgramUniforms {
 
 		@Override
 		public OptionalInt location(String name, UniformType type) {
-			int id = GlStateManager._glGetUniformLocation(program, name);
+			int id = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(program, name);
 
 			if (id == -1) {
 				return OptionalInt.empty();
@@ -312,7 +312,7 @@ public class ProgramUniforms {
 		public ProgramUniforms buildUniforms() {
 			// Check for any unsupported uniforms and warn about them so that we can easily figure out what uniforms we
 			// need to add.
-			int activeUniforms = GlStateManager.glGetProgrami(program, GL20C.GL_ACTIVE_UNIFORMS);
+			int activeUniforms = 0; // ponytail: Graft Shaders skips the GL uniform-type check; reflection data could drive it later
 			IntBuffer sizeBuf = BufferUtils.createIntBuffer(1);
 			IntBuffer typeBuf = BufferUtils.createIntBuffer(1);
 

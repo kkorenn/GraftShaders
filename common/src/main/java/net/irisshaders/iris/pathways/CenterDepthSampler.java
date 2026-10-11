@@ -48,14 +48,14 @@ public class CenterDepthSampler {
 	private boolean destroyed;
 
 	public CenterDepthSampler(IntSupplier depthSupplier, float halfLife) {
-		this.texture = GlStateManager._genTexture();
-		this.altTexture = GlStateManager._genTexture();
+		this.texture = net.irisshaders.iris.metal.MetalTextureIds.allocate();
+		this.altTexture = net.irisshaders.iris.metal.MetalTextureIds.allocate();
 		this.framebuffer = new GlFramebuffer();
 
 		InternalTextureFormat format = InternalTextureFormat.R32F;
 		setupColorTexture(texture, format);
 		setupColorTexture(altTexture, format);
-		GlStateManager._bindTexture(0);
+		net.irisshaders.iris.metal.GraftShadersState.bindTexture(0);
 
 		this.framebuffer.addColorAttachment(0, texture);
 		ProgramBuilder builder;
@@ -91,7 +91,7 @@ public class CenterDepthSampler {
 		VertexFormat.IndexType type = RenderSystem.getSequentialBuffer(VertexFormat.Mode.QUADS).type();
 		BlendModeOverride.restore();
 
-		GlStateManager._disableBlend();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 		try (RenderPass renderPass = RenderSystem.getDevice().createCommandEncoder().createRenderPass(() -> "centerDepthSmooth sampler", Minecraft.getInstance().getMainRenderTarget().getColorTextureView(), OptionalInt.empty())) {
 			renderPass.setPipeline(CompositeRenderer.COMPOSITE_PIPELINE);
 			renderPass.setIndexBuffer(indices, type);
@@ -102,7 +102,7 @@ public class CenterDepthSampler {
 			this.framebuffer.bind();
 			this.program.use();
 
-			GlStateManager._viewport(0, 0, 1, 1);
+			net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 			renderPass.drawIndexed(0, 0, 6, 1);
 
@@ -135,8 +135,8 @@ public class CenterDepthSampler {
 	}
 
 	public void destroy() {
-		GlStateManager._deleteTexture(texture);
-		GlStateManager._deleteTexture(altTexture);
+		net.irisshaders.iris.metal.MetalTextureIds.delete(texture);
+		net.irisshaders.iris.metal.MetalTextureIds.delete(altTexture);
 		framebuffer.destroy();
 		program.destroy();
 		destroyed = true;
