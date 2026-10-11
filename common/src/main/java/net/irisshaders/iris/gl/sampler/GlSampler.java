@@ -22,26 +22,8 @@ public class GlSampler extends GlResource {
 	public static final GlSampler MIPPED_NEAREST_REPEAT = new GlSampler(false, true, true, false, false, false);
 
 	public GlSampler(boolean linear, boolean linearMips, boolean mipmapped, boolean shadow, boolean hardwareShadow, boolean clamp) {
-		super(IrisRenderSystem.genSampler());
-
-		IrisRenderSystem.samplerParameteri(getId(), GL11C.GL_TEXTURE_MAG_FILTER, linear ? GL11C.GL_LINEAR : GL11C.GL_NEAREST);
-		IrisRenderSystem.samplerParameteri(getId(), GL11C.GL_TEXTURE_WRAP_S, clamp ? GL13C.GL_CLAMP_TO_EDGE : GL13C.GL_REPEAT);
-		IrisRenderSystem.samplerParameteri(getId(), GL11C.GL_TEXTURE_WRAP_T, clamp ? GL13C.GL_CLAMP_TO_EDGE : GL13C.GL_REPEAT);
-
-		if (mipmapped) {
-			IrisRenderSystem.samplerParameteri(getId(), GL11C.GL_TEXTURE_MIN_FILTER, linearMips ? (
-				linear ? GL11C.GL_LINEAR_MIPMAP_LINEAR : GL11C.GL_NEAREST_MIPMAP_LINEAR
-				) : (
-				linear ? GL11C.GL_LINEAR_MIPMAP_NEAREST : GL11C.GL_NEAREST_MIPMAP_NEAREST
-				));
-		} else {
-			IrisRenderSystem.samplerParameteri(getId(), GL11C.GL_TEXTURE_MIN_FILTER, linear ? GL11C.GL_LINEAR : GL11C.GL_NEAREST);
-		}
-
-		if (hardwareShadow) {
-			IrisRenderSystem.samplerParameteri(getId(), GL20C.GL_TEXTURE_COMPARE_MODE, GL30C.GL_COMPARE_REF_TO_TEXTURE);
-			IrisRenderSystem.samplerParameteri(getId(), GL20C.GL_TEXTURE_COMPARE_FUNC, GL11C.GL_LEQUAL);
-		}
+		// Hardware shadow samplers compare with GL_LEQUAL (same as Iris's GL sampler objects).
+		super(net.irisshaders.iris.metal.MetalSamplers.create(linear, linearMips, mipmapped, clamp, hardwareShadow ? 3L : -1L));
 	}
 
 	public GlSampler(int sampler) {

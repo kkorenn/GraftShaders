@@ -70,7 +70,7 @@ public class GlImage extends GlResource {
 	}
 
 	public void clear() {
-		ARBClearTexture.glClearTexImage(getGlId(), 0, format.getGlFormat(), pixelType.getGlFormat(), (int[]) null);
+		net.irisshaders.iris.gl.IrisRenderSystem.clearTexture(getGlId());
 	}
 
 	public String getName() {
@@ -105,7 +105,7 @@ public class GlImage extends GlResource {
 
 	@Override
 	protected void destroyInternal() {
-		GlStateManager._deleteTexture(getGlId());
+		net.irisshaders.iris.metal.MetalTextureIds.delete(getGlId());
 	}
 
 	public InternalTextureFormat getInternalFormat() {

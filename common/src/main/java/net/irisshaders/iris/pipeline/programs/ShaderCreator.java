@@ -184,28 +184,16 @@ public class ShaderCreator {
 
 
 	public static PartialShader link(String name, String vertex, String geometry, String tessControl, String tessEval, String fragment, VertexFormat vertexFormat, boolean isFallback) throws ShaderCompileException {
-		int i = GlStateManager.glCreateProgram();
-		if (i <= 0) {
-			throw new RuntimeException("Could not create shader program (returned program ID " + i + ")");
-		} else {
-			int vertexS = createShader(name, ShaderType.VERTEX, vertex);
-			int geometryS = createShader(name, ShaderType.GEOMETRY, geometry);
-			int tessContS = createShader(name, ShaderType.TESSELATION_CONTROL, tessControl);
-			int tessEvalS = createShader(name, ShaderType.TESSELATION_EVAL, tessEval);
-			int fragS = createShader(name, ShaderType.FRAGMENT, fragment);
-
-			attachIfValid(i, vertexS);
-			attachIfValid(i, geometryS);
-			attachIfValid(i, tessContS);
-			attachIfValid(i, tessEvalS);
-			attachIfValid(i, fragS);
-
-			((VertexFormatExtension) vertexFormat).bindAttributesIris(isFallback, i);
-
-			GlStateManager.glLinkProgram(i);
-
-			return new PartialShader(i, vertexS, fragS, geometryS, tessContS, tessEvalS);
+		// Same attribute slots Iris binds on GL (MixinVertexFormat.bindAttributesIris): element i -> location i.
+		java.util.Map<String, Integer> attributes = new java.util.HashMap<>();
+		int index = 0;
+		for (com.mojang.renderpearl.api.vertex.VertexFormatElement element : vertexFormat.getElements()) {
+			attributes.put(element.name(), index);
+			attributes.put("iris_" + element.name(), index);
+			index++;
 		}
+		net.irisshaders.iris.metal.MetalGlsl.Linked linked = net.irisshaders.iris.metal.MetalGlsl.link(name, vertex, tessControl, tessEval, geometry, fragment, attributes);
+		return new PartialShader(net.irisshaders.iris.metal.MetalProgram.create(name, linked, vertexFormat), -1, -1, -1, -1, -1);
 	}
 
 	private static void attachIfValid(int i, int s) {

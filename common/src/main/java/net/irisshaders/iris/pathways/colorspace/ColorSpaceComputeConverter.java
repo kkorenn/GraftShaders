@@ -23,7 +23,7 @@ public class ColorSpaceComputeConverter implements ColorSpaceConverter {
 	private ColorSpace colorSpace;
 	private ComputeProgram program;
 
-	private GlTexture target;
+	private com.mojang.renderpearl.api.textures.GpuTexture target;
 
 	public ColorSpaceComputeConverter(int width, int height, ColorSpace colorSpace) {
 		rebuildProgram(width, height, colorSpace);
@@ -56,11 +56,11 @@ public class ColorSpaceComputeConverter implements ColorSpaceConverter {
 		source = JcppProcessor.glslPreprocessSource(source, defineList);
 
 		ProgramBuilder builder = ProgramBuilder.beginCompute("colorSpaceCompute", source, ImmutableSet.of());
-		builder.addTextureImage(() -> target.glId(), InternalTextureFormat.RGBA8, "readImage");
+		builder.addTextureImage(() -> target.iris$getGlId(), InternalTextureFormat.RGBA8, "readImage");
 		this.program = builder.buildCompute();
 	}
 
-	public void process(GlTexture targetImage) {
+	public void process(com.mojang.renderpearl.api.textures.GpuTexture targetImage) {
 		if (colorSpace == ColorSpace.SRGB) return;
 
 		this.target = targetImage;

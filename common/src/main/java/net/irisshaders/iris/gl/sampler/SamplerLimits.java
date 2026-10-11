@@ -12,9 +12,11 @@ public class SamplerLimits {
 	private final int maxShaderStorageUnits;
 
 	private SamplerLimits() {
-		this.maxTextureUnits = GlStateManager._getInteger(GL20C.GL_MAX_TEXTURE_IMAGE_UNITS);
-		this.maxDrawBuffers = GlStateManager._getInteger(GL20C.GL_MAX_DRAW_BUFFERS);
-		this.maxShaderStorageUnits = IrisRenderSystem.supportsSSBO() ? GlStateManager._getInteger(GL45C.GL_MAX_SHADER_STORAGE_BUFFER_BINDINGS) : 0;
+		// Metal per-stage limits (Apple GPUs): 16 sampler states, 8 color attachments. Textures share sampler
+		// slots 1:1 in Graft Shaders, so 16 is the texture unit limit too. Storage buffers share the 31-entry buffer table.
+		this.maxTextureUnits = net.irisshaders.iris.metal.GraftShadersState.UNITS; // texture slots; samplers past 16 share an array (MetalGlsl.shareSamplers)
+		this.maxDrawBuffers = 8;
+		this.maxShaderStorageUnits = 8;
 	}
 
 	public static SamplerLimits get() {

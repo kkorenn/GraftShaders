@@ -154,7 +154,9 @@ public class RenderTargets {
 
 	public boolean resizeIfNeeded(int newDepthBufferVersion, GpuTexture newDepthTextureId, int newWidth, int newHeight, DepthBufferFormat newDepthFormat, PackDirectives packDirectives) {
 		boolean recreateDepth = false;
-		if (cachedDepthBufferVersion != newDepthBufferVersion) {
+		// Identity too: a different target can stand in for the main one with the same version number (Graft's
+		// render scale swaps in a smaller world target), and then the old depth texture would keep being used.
+		if (cachedDepthBufferVersion != newDepthBufferVersion || currentDepthTexture != newDepthTextureId) {
 			recreateDepth = true;
 			currentDepthTexture = newDepthTextureId;
 			cachedDepthBufferVersion = newDepthBufferVersion;
@@ -222,7 +224,7 @@ public class RenderTargets {
 	public void copyPreTranslucentDepth() {
 		if (translucentDepthDirty) {
 			translucentDepthDirty = false;
-			GlStateManager._bindTexture(noTranslucents.iris$getGlId());
+			net.irisshaders.iris.metal.GraftShadersState.bindTexture(noTranslucents.iris$getGlId());
 			depthSourceFb.bindAsReadBuffer();
 			IrisRenderSystem.copyTexImage2D(GL20C.GL_TEXTURE_2D, 0, currentDepthFormat.getGlInternalFormat(), 0, 0, cachedWidth, cachedHeight, 0);
 		} else {
@@ -234,7 +236,7 @@ public class RenderTargets {
 	public void copyPreHandDepth() {
 		if (handDepthDirty) {
 			handDepthDirty = false;
-			GlStateManager._bindTexture(noHand.iris$getGlId());
+			net.irisshaders.iris.metal.GraftShadersState.bindTexture(noHand.iris$getGlId());
 			depthSourceFb.bindAsReadBuffer();
 			IrisRenderSystem.copyTexImage2D(GL20C.GL_TEXTURE_2D, 0, currentDepthFormat.getGlInternalFormat(), 0, 0, cachedWidth, cachedHeight, 0);
 		} else {

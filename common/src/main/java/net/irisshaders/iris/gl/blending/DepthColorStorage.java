@@ -27,8 +27,8 @@ public class DepthColorStorage {
 
 		depthColorLocked = false;
 
-		GlStateManager._depthMask(false);
-		GlStateManager._colorMask(0);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 		depthColorLocked = true;
 	}
@@ -52,10 +52,10 @@ public class DepthColorStorage {
 
 		depthColorLocked = false;
 
-		GlStateManager._depthMask(originalDepthEnable);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 
 		for (int i = 0; i < originalColor.length; i++) {
-			GlStateManager._colorMask(i, originalColor[i]);
+			net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 		}
 	}
 }

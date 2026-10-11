@@ -5,5 +5,5 @@ import com.mojang.renderpearl.backend.opengl.GlTexture;
 public interface ColorSpaceConverter {
 	void rebuildProgram(int width, int height, ColorSpace colorSpace);
 
-	void process(GlTexture target);
+	void process(com.mojang.renderpearl.api.textures.GpuTexture target);
 }

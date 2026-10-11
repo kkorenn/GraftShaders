@@ -53,8 +53,6 @@ public class FullScreenQuadRenderer {
 	}
 
 	public void bind() {
-		var frontend = ((FrontendRenderPipeline) RenderSystem.getCompiledPipeline(CompositeRenderer.COMPOSITE_PIPELINE));
-		var backend = ((GlRenderPipeline) frontend.backendRenderPipeline());
-		backend.vertexArray().bind(new GpuBufferSlice[] { quad.slice() });
+		// Metal: the quad is bound with RenderPass.setVertexBuffer by the caller.
 	}
 }

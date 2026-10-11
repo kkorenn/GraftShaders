@@ -41,6 +41,6 @@ public class SingleColorTexture extends GlResource {
 
 	@Override
 	protected void destroyInternal() {
-		GlStateManager._deleteTexture(getGlId());
+		net.irisshaders.iris.metal.MetalTextureIds.delete(getGlId());
 	}
 }

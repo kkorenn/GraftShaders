@@ -8,7 +8,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 
 /**
- * A specialized map mapping {@link ShaderKey} to {@link com.mojang.blaze3d.opengl.GlProgram}.
+ * A specialized map mapping {@link ShaderKey} to {@link com.mojang.renderpearl.backend.opengl.GlProgram}.
  * Avoids much of the complexity / overhead of an EnumMap while ultimately
  * fulfilling the same function.
  */

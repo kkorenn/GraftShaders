@@ -21,8 +21,8 @@ public class GlFramebuffer extends GlResource {
 		super(IrisRenderSystem.createFramebuffer());
 
 		this.attachments = new Int2IntArrayMap();
-		this.maxDrawBuffers = GlStateManager._getInteger(GL30C.GL_MAX_DRAW_BUFFERS);
-		this.maxColorAttachments = GlStateManager._getInteger(GL30C.GL_MAX_COLOR_ATTACHMENTS);
+		this.maxDrawBuffers = 8;
+		this.maxColorAttachments = 8;
 		this.hasDepthAttachment = false;
 	}
 
@@ -33,7 +33,7 @@ public class GlFramebuffer extends GlResource {
 		//if (texture.getFormat().hasStencilAspect()) {
 		//	IrisRenderSystem.framebufferTexture2D(fb, GL30C.GL_FRAMEBUFFER, GL30C.GL_DEPTH_STENCIL_ATTACHMENT, GL30C.GL_TEXTURE_2D, texture, 0);
 		//} else {
-			IrisRenderSystem.framebufferTexture2D(fb, GL30C.GL_FRAMEBUFFER, GL30C.GL_DEPTH_ATTACHMENT, GL30C.GL_TEXTURE_2D, ((GlTexture) texture).glId(), 0);
+			IrisRenderSystem.framebufferTexture2D(fb, GL30C.GL_FRAMEBUFFER, GL30C.GL_DEPTH_ATTACHMENT, GL30C.GL_TEXTURE_2D, texture.iris$getGlId(), 0);
 		//}
 
 		this.hasDepthAttachment = true;
@@ -90,19 +90,19 @@ public class GlFramebuffer extends GlResource {
 	}
 
 	public void bind() {
-		GlStateManager._glBindFramebuffer(GL30C.GL_FRAMEBUFFER, getGlId());
+		net.irisshaders.iris.metal.GraftShadersState.framebuffer = getGlId();
 	}
 
 	public void bindAsReadBuffer() {
-		GlStateManager._glBindFramebuffer(GL30C.GL_READ_FRAMEBUFFER, getGlId());
+		bind();
 	}
 
 	public void bindAsDrawBuffer() {
-		GlStateManager._glBindFramebuffer(GL30C.GL_DRAW_FRAMEBUFFER, getGlId());
+		bind();
 	}
 
 	protected void destroyInternal() {
-		GlStateManager._glDeleteFramebuffers(getGlId());
+		net.irisshaders.iris.metal.MetalFramebuffers.delete(getGlId());
 	}
 
 	public int getStatus() {

@@ -43,7 +43,6 @@ public class ShaderStorageBufferHolder {
 				buffers[index].createStatic();
 			}
 		});
-		GlStateManager._glBindBuffer(GL43C.GL_SHADER_STORAGE_BUFFER, 0);
 	}
 
 	private static long toMib(long x) {

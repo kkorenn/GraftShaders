@@ -210,7 +210,7 @@ public class IrisGenericRenderProgram implements IDhApiGenericObjectShaderProgra
 			matrix.get(buffer);
 			buffer.rewind();
 
-			GL46C.glUniformMatrix4fv(index, false, buffer);
+			net.irisshaders.iris.gl.IrisRenderSystem.uniformMatrix4fv(index, false, buffer);
 		}
 	}
 
@@ -282,8 +282,8 @@ public class IrisGenericRenderProgram implements IDhApiGenericObjectShaderProgra
 
 	public void fillIndirectUniformData(DhApiRenderParam dhApiRenderParam, DhApiRenderableBoxGroupShading dhApiRenderableBoxGroupShading, IDhApiRenderableBoxGroup boxGroup, DhApiVec3d camPos) {
 		bind(dhApiRenderParam);
-		GlStateManager._enableDepthTest();
-		GlStateManager._depthFunc(GL30C.GL_GEQUAL);
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
+		net.irisshaders.iris.metal.GraftShadersState.ignoredState();
 		this.setUniform(this.instancedShaderOffsetChunkUniform,
 			new DhApiVec3i(
 				getChunkPosFromDouble(boxGroup.getOriginBlockPos().x),
@@ -331,19 +331,19 @@ public class IrisGenericRenderProgram implements IDhApiGenericObjectShaderProgra
 	}
 
 	private void setUniform(int index, int value) {
-		GL43C.glUniform1i(index, value);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(index, value);
 	}
 
 	private void setUniform(int index, float value) {
-		GL43C.glUniform1f(index, value);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1f(index, value);
 	}
 
 	private void setUniform(int index, DhApiVec3f pos) {
-		GL43C.glUniform3f(index, pos.x, pos.y, pos.z);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform3f(index, pos.x, pos.y, pos.z);
 	}
 
 	private void setUniform(int index, DhApiVec3i pos) {
-		GL43C.glUniform3i(index, pos.x, pos.y, pos.z);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform3i(index, pos.x, pos.y, pos.z);
 	}
 
 }

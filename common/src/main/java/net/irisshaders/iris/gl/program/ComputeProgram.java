@@ -26,8 +26,8 @@ public final class ComputeProgram extends GlResource {
 	ComputeProgram(int program, ProgramUniforms uniforms, ProgramSamplers samplers, ProgramImages images) {
 		super(program);
 
-		localSize = new int[3];
-		IrisRenderSystem.getProgramiv(program, GL43C.GL_COMPUTE_WORK_GROUP_SIZE, localSize);
+		// local_size comes from the shader translation (MetalGlsl.linkCompute).
+		localSize = net.irisshaders.iris.metal.MetalProgram.get(program).linked.localSize().clone();
 		this.uniforms = uniforms;
 		this.samplers = samplers;
 		this.images = images;
@@ -35,7 +35,7 @@ public final class ComputeProgram extends GlResource {
 
 	public static void unbind() {
 		ProgramUniforms.clearActiveUniforms();
-		GlStateManager._glUseProgram(0);
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(0);
 	}
 
 	public void setWorkGroupInfo(Vector2f relativeWorkGroups, Vector3i absoluteWorkGroups, FilledIndirectPointer indirectPointer) {
@@ -64,7 +64,7 @@ public final class ComputeProgram extends GlResource {
 	}
 
 	public void use() {
-		GlStateManager._glUseProgram(getGlId());
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(getGlId());
 
 		uniforms.update();
 		samplers.update();
@@ -96,7 +96,7 @@ public final class ComputeProgram extends GlResource {
 	}
 
 	public void destroyInternal() {
-		GlStateManager.glDeleteProgram(getGlId());
+		net.irisshaders.iris.metal.MetalProgram.delete(getGlId());
 	}
 
 	/**

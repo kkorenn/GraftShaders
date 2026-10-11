@@ -21,12 +21,11 @@ public final class Program extends GlResource {
 	public static void unbind() {
 		ProgramUniforms.clearActiveUniforms();
 		ProgramSamplers.clearActiveSamplers();
-		GlStateManager._glUseProgram(0);
+		net.irisshaders.iris.metal.GraftShadersState.program = null;
 	}
 
 	public void use() {
-		IrisRenderSystem.memoryBarrier(GL43C.GL_SHADER_IMAGE_ACCESS_BARRIER_BIT | GL43C.GL_TEXTURE_FETCH_BARRIER_BIT | GL43C.GL_SHADER_STORAGE_BARRIER_BIT);
-		GlStateManager._glUseProgram(getGlId());
+		net.irisshaders.iris.metal.GraftShadersState.program = net.irisshaders.iris.metal.MetalProgram.get(getGlId());
 
 		uniforms.update();
 		samplers.update();
@@ -34,7 +33,7 @@ public final class Program extends GlResource {
 	}
 
 	public void destroyInternal() {
-		GlStateManager.glDeleteProgram(getGlId());
+		net.irisshaders.iris.metal.MetalProgram.delete(getGlId());
 	}
 
 	/**

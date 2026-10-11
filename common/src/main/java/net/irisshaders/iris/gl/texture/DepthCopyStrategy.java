@@ -13,20 +13,21 @@ import org.lwjgl.system.MemoryUtil;
 
 public interface DepthCopyStrategy {
 	static DepthCopyStrategy fastest(boolean combinedStencilRequired) {
-		// Check whether glCopyImageSubData is available by checking the function directly...
-		// Gl.getCapabilities().OpenGL43 can be false even if OpenGL 4.3 functions are supported,
-		// because Minecraft requests an OpenGL 3.2 forward compatible function.
-		//
-		// Perhaps calling GL43.isAvailable would be a different option, but we only need one
-		// function, so we just check for that function.
-		if (GL.getCapabilities().glCopyImageSubData != MemoryUtil.NULL) {
-			return new Gl43CopyImage();
+		return new MetalCopy();
+	}
+
+	/** Metal: depth (and depth+stencil) textures copy directly with a blit. */
+	class MetalCopy implements DepthCopyStrategy {
+		@Override
+		public boolean needsDestFramebuffer() {
+			return false;
 		}
 
-		if (combinedStencilRequired) {
-			return new Gl30BlitFbCombinedDepthStencil();
-		} else {
-			return new Gl20CopyTexture();
+		@Override
+		public void copy(GlFramebuffer sourceFb, int sourceTexture, GlFramebuffer destFb, int destTexture, int width, int height) {
+			com.mojang.blaze3d.systems.RenderSystem.getDevice().createCommandEncoder().copyTextureToTexture(
+				net.irisshaders.iris.metal.MetalTextureIds.get(sourceTexture), net.irisshaders.iris.metal.MetalTextureIds.get(destTexture), 0, 0, 0, 0, 0, width, height
+			);
 		}
 	}
 
@@ -57,7 +58,7 @@ public interface DepthCopyStrategy {
 		public void copy(GlFramebuffer sourceFb, int sourceTexture, GlFramebuffer destFb, int destTexture, int width, int height) {
 			sourceFb.bindAsReadBuffer();
 
-			int previousTexture = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
+			int previousTexture = net.irisshaders.iris.metal.GraftShadersState.unitTextures[net.irisshaders.iris.metal.GraftShadersState.activeUnit];
 
 			IrisRenderSystem.copyTexSubImage2D(
 				destTexture,
@@ -74,7 +75,7 @@ public interface DepthCopyStrategy {
 				// height
 				height);
 
-			GlStateManager._bindTexture(previousTexture);
+			net.irisshaders.iris.metal.GraftShadersState.bindTexture(previousTexture);
 		}
 	}
 

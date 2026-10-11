@@ -24,7 +24,7 @@ import java.util.Stack;
 import java.util.function.Consumer;
 
 public final class GLDebug {
-	private static DebugState debugState;
+	private static DebugState debugState = new UnsupportedDebugState();
 
 	/**
 	 * Sets up debug callbacks
@@ -303,11 +303,7 @@ public final class GLDebug {
 	}
 
 	public static void reloadDebugState() {
-		if (Iris.getIrisConfig().areDebugOptionsEnabled() && (GL.getCapabilities().GL_KHR_debug || GL.getCapabilities().OpenGL43)) {
-			debugState = new KHRDebugState();
-		} else {
-			debugState = new UnsupportedDebugState();
-		}
+		debugState = new UnsupportedDebugState(); // Graft Shaders: GL debug labels do not exist on Metal
 	}
 
 	public static void nameObject(int id, int object, String name) {

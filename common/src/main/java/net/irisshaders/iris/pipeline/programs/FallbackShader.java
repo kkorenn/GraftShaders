@@ -83,27 +83,27 @@ public class FallbackShader extends GlProgram implements IrisProgram {
 		layouts.addAll(BindGroupLayouts.GLOBALS.uniforms());
 		layouts.addAll(BindGroupLayouts.FOG.uniforms());
 
-		super.setupBindGroupLayouts(layouts);
+		// Metal: vanilla uniform blocks are bound by name at draw time (GraftShadersDraw), not via GL block indices.
 
 		this.parent = parent;
 		this.blendModeOverride = blendModeOverride;
 		this.writingToBeforeTranslucent = writingToBeforeTranslucent;
 		this.writingToAfterTranslucent = writingToAfterTranslucent;
 
-		this.FOG_DENSITY = GlStateManager._glGetUniformLocation(programId, "FogDensity");
-		this.FOG_IS_EXP2 = GlStateManager._glGetUniformLocation(programId, "FogIsExp2");
+		this.FOG_DENSITY = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "FogDensity");
+		this.FOG_IS_EXP2 = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "FogIsExp2");
 
-		this.gtexture = GlStateManager._glGetUniformLocation(programId, "gtexture");
-		this.overlay = GlStateManager._glGetUniformLocation(programId, "overlay");
-		this.lightmap = GlStateManager._glGetUniformLocation(programId, "lightmap");
+		this.gtexture = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "gtexture");
+		this.overlay = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "overlay");
+		this.lightmap = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "lightmap");
 
-		GlStateManager._glUseProgram(programId);
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(programId);
 
 
-		int ALPHA_TEST_VALUE = GlStateManager._glGetUniformLocation(programId, "AlphaTestValue");
+		int ALPHA_TEST_VALUE = net.irisshaders.iris.metal.GraftShadersState.uniformLocation(programId, "AlphaTestValue");
 
 		if (ALPHA_TEST_VALUE > -1) {
-			GL46C.glUniform1f(ALPHA_TEST_VALUE, alphaValue);
+			net.irisshaders.iris.gl.IrisRenderSystem.uniform1f(ALPHA_TEST_VALUE, alphaValue);
 		}
 	}
 
@@ -118,7 +118,7 @@ public class FallbackShader extends GlProgram implements IrisProgram {
 
 	@Override
 	public int iris$getBlockIndex(int program, CharSequence uniformBlockName) {
-		return GL31C.glGetUniformBlockIndex(program, uniformBlockName);
+		return net.irisshaders.iris.metal.GraftShadersState.blockBinding(program, uniformBlockName.toString());
 	}
 
 	@Override
@@ -131,23 +131,23 @@ public class FallbackShader extends GlProgram implements IrisProgram {
 		isSetUp = true;
 		DepthColorStorage.unlockDepthColor();
 
-		GlStateManager._glUseProgram(getProgramId());
+		net.irisshaders.iris.metal.GraftShadersState.useProgram(getProgramId());
 
 		if (FOG_DENSITY > -1 && FOG_IS_EXP2 > -1) {
 			float fogDensity = CapturedRenderingState.INSTANCE.getFogDensity();
 
 			if (fogDensity >= 0.0) {
-				GL46C.glUniform1f(FOG_DENSITY, fogDensity);
-				GL46C.glUniform1i(FOG_IS_EXP2, 1);
+				net.irisshaders.iris.gl.IrisRenderSystem.uniform1f(FOG_DENSITY, fogDensity);
+				net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(FOG_IS_EXP2, 1);
 			} else {
-				GL46C.glUniform1f(FOG_DENSITY, 0.0f);
-				GL46C.glUniform1i(FOG_IS_EXP2, 0);
+				net.irisshaders.iris.gl.IrisRenderSystem.uniform1f(FOG_DENSITY, 0.0f);
+				net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(FOG_IS_EXP2, 0);
 			}
 		}
 
-		GlStateManager._glUniform1i(gtexture, 0);
-		GlStateManager._glUniform1i(overlay, 1);
-		GlStateManager._glUniform1i(lightmap, 2);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(gtexture, 0);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(overlay, 1);
+		net.irisshaders.iris.gl.IrisRenderSystem.uniform1i(lightmap, 2);
 
 		if (this.blendModeOverride != null) {
 			this.blendModeOverride.apply();
@@ -158,5 +158,10 @@ public class FallbackShader extends GlProgram implements IrisProgram {
 		} else {
 			writingToAfterTranslucent.bind();
 		}
+	}
+
+	@Override
+	public void close() {
+		net.irisshaders.iris.metal.MetalProgram.delete(getProgramId());
 	}
 }

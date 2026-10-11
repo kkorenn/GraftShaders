@@ -25,6 +25,10 @@ public final class IrisBindings {
 	}
 
 	public static void apply(int program) {
+		// Metal: blocks and samplers are bound by name (MetalGlsl link + GraftShadersDraw), there are no GL binding points.
+		if (true) {
+			return;
+		}
 		if (GL20C.glGetProgrami(program, GL20C.GL_LINK_STATUS) == GL20C.GL_FALSE) {
 			return;
 		}

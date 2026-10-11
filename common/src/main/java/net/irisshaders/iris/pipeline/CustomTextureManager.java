@@ -147,12 +147,8 @@ public class CustomTextureManager {
 				//     now.
 				return new TextureWrapper(() -> {
 					AbstractTexture texture = textureManager.getTexture(textureLocation);
-					if (texture instanceof TextureAtlas || texture instanceof PBRAtlasTexture) {
-						int tex = GlStateManagerAccessor.getActiveTexture();
-						int binding = GlStateManagerAccessor.getTEXTURES()[tex].binding;
-						GlStateManager._activeTexture(GL46C.GL_TEXTURE0 + tex);
-						GlStateManager._bindTexture(binding);
-					}
+					// GL Iris restores the GL texture binding here (fetching an atlas could rebind it); on Metal nothing is bound by
+					// the fetch, and "restoring" vanilla's (empty) GL state tracker would unbind texture unit 0.
 					return texture != null ? texture.getTexture().iris$getGlId() : textureManager.getTexture(MissingTextureAtlasSprite.getLocation()).getTexture().iris$getGlId();
 				}, TextureType.TEXTURE_2D);
 			} else {
@@ -163,12 +159,8 @@ public class CustomTextureManager {
 					AbstractTexture texture = textureManager.getTexture(textureLocation);
 
 					if (texture != null) {
-						if (texture instanceof TextureAtlas || texture instanceof PBRAtlasTexture) {
-							int tex = GlStateManagerAccessor.getActiveTexture();
-							int binding = GlStateManagerAccessor.getTEXTURES()[tex].binding;
-							GlStateManager._activeTexture(GL46C.GL_TEXTURE0 + tex);
-							GlStateManager._bindTexture(binding);
-						}
+						// GL Iris restores the GL texture binding here (fetching an atlas could rebind it); on Metal nothing is bound by
+						// the fetch, and "restoring" vanilla's (empty) GL state tracker would unbind texture unit 0.
 						int id = texture.getTexture().iris$getGlId();
 						PBRTextureHolder pbrHolder = PBRTextureManager.INSTANCE.getOrLoadHolder(id);
 						AbstractTexture pbrTexture = switch (pbrType) {
@@ -178,10 +170,10 @@ public class CustomTextureManager {
 
 						TextureFormat textureFormat = TextureFormatLoader.getFormat();
 						if (textureFormat != null) {
-							int previousBinding = GlStateManagerAccessor.getTEXTURES()[GlStateManagerAccessor.getActiveTexture()].binding;
-							GlStateManager._bindTexture(pbrTexture.getTexture().iris$getGlId());
+							int previousBinding = net.irisshaders.iris.metal.GraftShadersState.unitTextures[net.irisshaders.iris.metal.GraftShadersState.activeUnit];
+							net.irisshaders.iris.metal.GraftShadersState.bindTexture(pbrTexture.getTexture().iris$getGlId());
 							textureFormat.setupTextureParameters(pbrType, pbrTexture);
-							GlStateManager._bindTexture(previousBinding);
+							net.irisshaders.iris.metal.GraftShadersState.bindTexture(previousBinding);
 						}
 
 						return pbrTexture.getTexture().iris$getGlId();
