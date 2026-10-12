@@ -31,10 +31,11 @@ public final class GraftShadersState {
 	}
 
 	private static int debugCount;
+	private static final boolean DEBUG = java.nio.file.Files.exists(java.nio.file.Path.of("/tmp/graftshaders-dump"));
 
 	/** Debug (with /tmp/graftshaders-dump): who clears unit 0 after it held a texture. */
 	public static void debugUnbind(int unit, int texture) {
-		if (unit == 0 && texture == 0 && unitTextures[0] != 0 && debugCount < 3 && java.nio.file.Files.exists(java.nio.file.Path.of("/tmp/graftshaders-dump"))) {
+		if (unit == 0 && texture == 0 && unitTextures[0] != 0 && debugCount < 3 && DEBUG) {
 			debugCount++;
 			net.irisshaders.iris.Iris.logger.info("Graft Shaders debug: unit 0 cleared (was tex " + unitTextures[0] + ")", new Throwable());
 		}
