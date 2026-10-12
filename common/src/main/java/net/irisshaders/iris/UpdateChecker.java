@@ -50,6 +50,8 @@ public class UpdateChecker {
 	}
 
 	public void checkForUpdates(IrisConfig irisConfig) {
+		// Graft Shaders: upstream's index would point users at real Iris, which can't run on Graft.
+		if (true) return;
 		if (BuildConfig.IS_SHARED_BETA) {
 			checkBetaUpdates();
 			return;
