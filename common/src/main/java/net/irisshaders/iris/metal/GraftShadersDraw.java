@@ -229,9 +229,9 @@ public final class GraftShadersDraw implements DrawOverride {
 			boolean override = reserved != null && reserved(reserved, redirected >= 0 ? redirected : unit);
 			if (DEBUG && program.name.contains("terrain") && LOGGED.add(program.name + "/" + program.samplerNames[binding])) {
 				long t = override ? RESERVED[(redirected >= 0 ? redirected : unit) * 2] : MetalTextureIds.mtl(GraftShadersState.unitTextures[unit]);
-				unit = redirected >= 0 ? redirected : unit;
-				net.irisshaders.iris.Iris.logger.info("Graft Shaders debug: {} {} unit {} {} tex {}x{} mips {} type {}", program.name, program.samplerNames[binding], unit,
-					override ? "reserved" : "iris id " + GraftShadersState.unitTextures[unit], t == 0 ? 0 : dev.graft.metal.ObjC.send(t, dev.graft.metal.ObjC.sel("width")),
+				int logUnit = redirected >= 0 ? redirected : unit;
+				net.irisshaders.iris.Iris.logger.info("Graft Shaders debug: {} {} unit {} {} tex {}x{} mips {} type {}", program.name, program.samplerNames[binding], logUnit,
+					override ? "reserved" : "iris id " + GraftShadersState.unitTextures[logUnit], t == 0 ? 0 : dev.graft.metal.ObjC.send(t, dev.graft.metal.ObjC.sel("width")),
 					t == 0 ? 0 : dev.graft.metal.ObjC.send(t, dev.graft.metal.ObjC.sel("height")), t == 0 ? 0 : dev.graft.metal.ObjC.send(t, dev.graft.metal.ObjC.sel("mipmapLevelCount")),
 					t == 0 ? 0 : dev.graft.metal.ObjC.send(t, dev.graft.metal.ObjC.sel("textureType")));
 			}

@@ -172,6 +172,7 @@ public final class MetalProgram {
 	public static void delete(int id) {
 		MetalProgram p = PROGRAMS.remove(id);
 		if (p != null) {
+			if (GraftShadersState.program == p) GraftShadersState.program = null;
 			p.pipelines.values().forEach(MetalPipeline::close);
 			dev.graft.metal.ObjC.release(p.computePipeline);
 			dev.graft.metal.ObjC.release(p.prepassState);
